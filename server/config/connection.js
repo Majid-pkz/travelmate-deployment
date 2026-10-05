@@ -1,9 +1,12 @@
 const mongoose = require('mongoose');
+const { requireEnvironment } = require('./environment');
 
-mongoose.connect(
-  process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/SidebarData'
-  
-);
+const uri = requireEnvironment('MONGODB_URI');
+if (!/^mongodb(?:\+srv)?:\/\//.test(uri)) {
+  throw new Error('MONGODB_URI must use the mongodb:// or mongodb+srv:// scheme.');
+}
 
+mongoose.connect(uri);
 
 module.exports = mongoose.connection;
+

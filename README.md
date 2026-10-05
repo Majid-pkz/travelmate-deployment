@@ -16,9 +16,50 @@ TravelMate is a web application built with the MERN stack and GraphQL. It aims t
 * Back-end: Node.js, Express, GraphQL, MongoDB
 * Authentication: JWT (JSON Web Tokens)
 * Image Upload: Multer
-* Deployment: Heroku, MongoDB Atlas
+* Original deployment: Heroku, MongoDB Atlas
+* 2026 modernization: in progress on `modernize-2026`
 
 
 ## Contributing
 
 Contributions to TravelMate are welcome! If you find any bugs, have suggestions for improvements, or would like to add new features, please open an issue or submit a pull request.
+
+## 2026 modernization
+
+This branch continues the original 2023 project and preserves its commit history.
+The first update adds private environment configuration and replaces the hardcoded JWT
+secret with a required runtime value. Authorization, password handling, UI
+reliability, dependency updates, durable image uploads and deployment remain in
+progress. This configuration update alone does not make the application ready for
+public use.
+
+## Private local configuration
+
+1. Install Node.js 24 LTS.
+2. Reset any database-user password previously committed to the TravelMate
+   repositories. Removing a file from the current tree does not remove older copies.
+   Atlas database-user credentials are different from your Atlas account login.
+3. Copy `.env.example` to `.env` at the project root.
+4. Set `MONGODB_URI` to your connection string with fresh credentials. The example
+   uses a separate local database named `travelmate_portfolio`. The application
+   reads `MONGODB_URI`, not the historical `MONGO_URI` name.
+5. Generate a JWT secret locally and paste its output into `JWT_SECRET`:
+
+   ```sh
+   node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"
+   ```
+
+The server loads the root `.env` file automatically from either working directory.
+Hosting runtime environment variables take precedence. Never put `JWT_SECRET`
+or database credentials in frontend variables or committed files.
+
+Run the configuration checks without installing third-party packages:
+
+```sh
+npm run test:config
+```
+
+These checks verify environment loading, runtime-variable precedence and required
+secret validation. They do not verify database connectivity or complete user flows.
+Dependency installation and end-to-end validation are the next modernization stage.
+

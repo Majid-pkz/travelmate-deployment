@@ -3,3 +3,6 @@ node_modules
 create_folder_structure.sh
 remove_folders.sh
 .env
+.env.*
+!.env.example
+
