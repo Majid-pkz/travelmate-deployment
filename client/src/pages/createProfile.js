@@ -5,19 +5,17 @@ import { CREATE_PROFILE } from '../utils/mutations';
 import { PROFILE_EXISTS, QUERY_INTEREST } from '../utils/queries';
 import '../pages/Style/createProfile.css'
 import Auth from '../utils/auth';
-import Upload from '../components/Upload';
 import Select from 'react-select';
 
 
 const Profile = () => {
-  const [profileExists, setProfileExists] = useState(false);
   const [redirectToProfile, setRedirectToProfile] = useState(false);
   const [selectedInterests, setSelectedInterests] = useState([]);
   const handleInterestsChange = (selectedOptions) => {
     setSelectedInterests(selectedOptions);
   };
 
-  const { loading: interestLoading, data: interestData } = useQuery(QUERY_INTEREST);
+  const { data: interestData } = useQuery(QUERY_INTEREST);
   const interestOptions = interestData?.interests.map((interest) => ({
     value: interest._id,
     label: interest.label,
@@ -35,14 +33,13 @@ const Profile = () => {
 
   const [createProfile, { error, data }] = useMutation(CREATE_PROFILE);
 
-  const { loading: profileExistsLoading, data: profileExistsData } = useQuery(PROFILE_EXISTS, {
+  const { data: profileExistsData } = useQuery(PROFILE_EXISTS, {
     variables: { profileUser: userData.data._id },
   });
 
   useEffect(() => {
     if (profileExistsData && profileExistsData.profileExist) {
       console.log('profile exists', profileExistsData);
-      setProfileExists(true);
       setRedirectToProfile(true);
     }
   }, [profileExistsData]);
@@ -58,10 +55,9 @@ const Profile = () => {
 
   const handleFormSubmit = async (event) => {
     event.preventDefault();
-    console.log(selectedInterests[0].value);
 
     try {
-      const { data } = await createProfile({
+      await createProfile({
         variables: {
           ...formState,
           age: formState.age ? parseInt(formState.age) : null,

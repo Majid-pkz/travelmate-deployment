@@ -6,46 +6,33 @@ import Slide3 from '../../assets/slide3.jpg';
 import Slide4 from '../../assets/slide4.jpg';
 import Slide5 from '../../assets/slide5.jpg';
 
+const images = [
+  { url: Slide1 },
+  { url: Slide2 },
+  { url: Slide3 },
+  { url: Slide4 },
+  { url: Slide5 },
+];
+
 const Slider = () => {
   const [current, setCurrent] = useState(0);
   const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
-    const preloadImages = () => {
-      const imageList = [Slide1, Slide2, Slide3, Slide4, Slide5];
-      imageList.forEach((image) => {
-        const img = new Image();
-        img.src = image;
-      });
-    };
+    images.forEach(({ url }) => {
+      const img = new Image();
+      img.src = url;
+    });
+    setIsLoaded(true);
+  }, []);
 
-    const interval = setTimeout(() => {
+  useEffect(() => {
+    const timeout = setTimeout(() => {
       setCurrent((current) => (current === images.length - 1 ? 0 : current + 1));
     }, 5000);
 
-    preloadImages();
-    setIsLoaded(true);
-
-    return () => clearTimeout(interval);
+    return () => clearTimeout(timeout);
   }, [current]);
-
-  const images = [
-    {
-      url: Slide1,
-    },
-    {
-      url: Slide2,
-    },
-    {
-      url: Slide3,
-    },
-    {
-      url: Slide4,
-    },
-    {
-      url: Slide5,
-    },
-  ];
 
   const bgImageStyle = {
     backgroundImage: `url(${images[current].url})`,

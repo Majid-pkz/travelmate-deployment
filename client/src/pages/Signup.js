@@ -124,7 +124,7 @@ const Signup = () => {
         </div>
 
         <div className="col-sm-6 d-none d-sm-block px-0">
-        <img src={Tent} alt="Signup image" className="w-100" style={{ objectFit: 'cover', objectPosition: 'center', height: 'calc(100vh - 170px)', overflow: 'hidden' }} />
+        <img src={Tent} alt="" className="w-100" style={{ objectFit: 'cover', objectPosition: 'center', height: 'calc(100vh - 170px)', overflow: 'hidden' }} />
         </div>
       </div>
     </div>

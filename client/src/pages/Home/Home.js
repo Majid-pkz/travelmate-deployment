@@ -1,7 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import Slider from '../../components/Slider/Slider';
-import { Container, TextField } from "@mui/material";
 import SearchBarTest from '../../components/SearchBar/SearchBar';
 import Auth from '../../utils/auth';
 import './Home.css'

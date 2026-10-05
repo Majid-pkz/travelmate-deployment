@@ -1,6 +1,6 @@
 import React from 'react';
 import { useState } from 'react'
-import { NavLink, Navigate, Link, useNavigate} from 'react-router-dom';
+import { NavLink, Link, useNavigate} from 'react-router-dom';
 import Logo from '../../assets/logo.png';
 import MenuIcon from '@mui/icons-material/Menu';
 import './Header.css'

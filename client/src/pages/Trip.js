@@ -17,9 +17,7 @@ import Collapse from '@mui/material/Collapse';
 import Avatar from '@mui/material/Avatar';
 import IconButton from '@mui/material/IconButton';
 import Typography from '@mui/material/Typography';
-import { red } from '@mui/material/colors';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import MoreVertIcon from '@mui/icons-material/MoreVert';
 
 import oceanView from '../assets/oceanView.jpg';
 import AuthService from '../utils/auth';
@@ -53,8 +51,12 @@ const TripCard = ({ trip }) => {
   };
 
   const handleJoinTrip = async () => {
-    const userId = AuthService.getProfile().data._id;
     try {
+      if (!AuthService.loggedIn()) {
+        setJoinMessage('Log in to join this trip.');
+        return;
+      }
+      const userId = AuthService.getProfile().data._id;
       const response = await joinTrip({ variables: { joinTripId: trip._id, userJoining: userId } });
       console.log('Joined trip:', response.data.joinTrip);
       setJoinMessage('Successfully joined the trip!');
@@ -66,12 +68,13 @@ const TripCard = ({ trip }) => {
   };
 
   useEffect(() => {
-    const isUserJoined = trip.travelmates.find((travelmate) => travelmate._id === AuthService.getProfile().data._id);
-    setJoined(!!isUserJoined);
-    if (isUserJoined) {
-      setJoinMessage('Successfully joined the trip!');
-    }
-  }, []);
+    const userId = AuthService.loggedIn() ? AuthService.getProfile().data._id : null;
+    const isUserJoined = Boolean(
+      userId && trip.travelmates?.some((travelmate) => travelmate._id === userId)
+    );
+    setJoined(isUserJoined);
+    setJoinMessage(isUserJoined ? 'Successfully joined the trip!' : '');
+  }, [trip.travelmates]);
 
   return (
     <Card sx={{ maxWidth: '90%', direction: 'row',justifyContent: 'center', alignItems: 'center', marginLeft: '1.2rem' }}>
@@ -83,11 +86,6 @@ const TripCard = ({ trip }) => {
             {trip.creator.firstname}
           </Avatar>
         }
-        // action={
-        //   <IconButton aria-label="settings">
-        //     <MoreVertIcon />
-        //   </IconButton>
-        // }
         // title={<Typography variant="h4" color="var(--black)">{trip.title}</Typography>}
         // subheader={trip.endDate}
         
@@ -126,7 +124,7 @@ const TripCard = ({ trip }) => {
       {!joined && <Button onClick={handleJoinTrip}>Join Trip</Button>}
         {/* Join Message */}
         {joinMessage && <p style={{color: 'var(--black)'}}>{joinMessage} <br></br>
-        <a href='/my-upcoming-trips'>View your trips</a>
+        {joined && <a href='/my-upcoming-trips'>View your trips</a>}
         </p>}
       </CardActions>
     </Card>

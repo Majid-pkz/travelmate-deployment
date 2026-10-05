@@ -8,7 +8,7 @@ import Auth from '../utils/auth';
 
 const Login = (props) => {
   const [formState, setFormState] = useState({ email: '', password: '' });
-  const [login, { error, data }] = useMutation(LOGIN_USER);
+  const [login, { error }] = useMutation(LOGIN_USER);
 
   const handleChange = (event) => {
     const { name, value } = event.target;
@@ -84,7 +84,7 @@ const Login = (props) => {
         </div>
 
         <div className="col-sm-6 d-none d-sm-block px-0">
-          <img src={JunglePic} alt="Login image" className="w-100" style={{ objectFit: 'cover', objectPosition: 'center', height: 'calc(100vh - 170px)', overflow: 'hidden' }} />
+          <img src={JunglePic} alt="" className="w-100" style={{ objectFit: 'cover', objectPosition: 'center', height: 'calc(100vh - 170px)', overflow: 'hidden' }} />
         </div>
       </div>
       {/* where error message appeared before */}

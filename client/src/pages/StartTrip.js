@@ -49,11 +49,10 @@ const StartTrip = () => {
     event.preventDefault();
 
     try {
-      const { data } = await createTrip({
+      await createTrip({
         variables: { ...formState },
       });
 
-      //Auth.login(data.createTrip.token);
     } catch (e) {
       console.error(e);
     }

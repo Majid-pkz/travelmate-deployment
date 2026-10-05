@@ -1,22 +1,11 @@
 import React, { useState } from 'react';
-import { useQuery } from '@apollo/client';
-import { SEARCH_TRIPS } from '../../utils/queries';
-import { Link } from 'react-router-dom';
 import { BsSearch } from 'react-icons/bs';
 
-import oceanView from '../../assets/oceanView.jpg';
-import Auth from '../../utils/auth';
 
 const SearchTrips = () => {
   const [formState, setFormState] = useState({
     departureLocation: '',
   });
-
-  const { loading, error, data } = useQuery(SEARCH_TRIPS, {
-    variables: { ...formState },
-  });
-
-  const trips = data?.searchTrips || [];
 
   const handleChange = (event) => {
     const { name, value } = event.target;
@@ -42,7 +31,7 @@ const SearchTrips = () => {
             <input
               type="search"
               placeholder="Enter departure location"
-              aria-describedby="button-addon1"
+              aria-label="Departure location"
               className="form-control border-0"
               style={{ backgroundColor: 'rgba(255, 255, 255, 0)', borderRadius: '20px' }}
               name="departureLocation"
@@ -50,7 +39,7 @@ const SearchTrips = () => {
             onChange={handleChange}
             />
             <button
-              id="button-addon1"
+              aria-label="Search trips"
               type="submit"
               className="btn btn-link text-primary rounded-pill bg-transparent border-0"
             >
