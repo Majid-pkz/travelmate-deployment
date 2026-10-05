@@ -19,7 +19,7 @@ function fixture(t, envText) {
   // Stub external packages so configuration checks need no npm installation.
   for (const [name, source] of Object.entries({
     jsonwebtoken: 'module.exports = {};',
-    mongoose: 'module.exports = { connect(uri) { console.log("connected:" + uri); }, connection: {} };',
+    mongoose: 'module.exports = { connect(uri) { console.log("connected:" + uri); this.connection.dnsServers = require("node:dns").promises.getServers(); }, connection: {} };',
   })) {
     const dir = path.join(root, 'node_modules', name);
     mkdirSync(dir, { recursive: true });
@@ -104,3 +104,38 @@ test('database configuration forwards the configured connection string', (t) => 
   assert.equal(result.stdout.trim(), 'connected:' + uri);
 });
 
+test('database startup preserves the default resolver when no DNS override is configured', (t) => {
+  const root = fixture(t);
+  const connection = JSON.stringify(path.join(root, 'server/config/connection.js'));
+  const script = `require('node:dns').setServers(['192.0.2.53']); console.log(JSON.stringify(require(${connection}).dnsServers));`;
+  const result = run(root, script, { MONGODB_URI: 'mongodb://127.0.0.1:27017/test' });
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(JSON.parse(result.stdout.trim().split('\n').at(-1)), ['192.0.2.53']);
+});
+
+test('the private root file configures Node DNS before database startup from server', (t) => {
+  const root = fixture(t, 'MONGODB_URI=mongodb+srv://example.mongodb.net/test\nDNS_SERVERS=8.8.8.8, 8.8.4.4\n');
+  const connection = JSON.stringify(path.join(root, 'server/config/connection.js'));
+  const result = run(root, `console.log(JSON.stringify(require(${connection}).dnsServers));`, {}, path.join(root, 'server'));
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(JSON.parse(result.stdout.trim().split('\n').at(-1)), ['8.8.8.8', '8.8.4.4']);
+});
+
+test('hosting DNS configuration takes precedence over the private root file', (t) => {
+  const root = fixture(t, 'MONGODB_URI=mongodb+srv://example.mongodb.net/test\nDNS_SERVERS=8.8.8.8\n');
+  const connection = JSON.stringify(path.join(root, 'server/config/connection.js'));
+  const result = run(root, `console.log(JSON.stringify(require(${connection}).dnsServers));`, { DNS_SERVERS: '1.1.1.1,2606:4700:4700::1111' });
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(JSON.parse(result.stdout.trim().split('\n').at(-1)), ['1.1.1.1', '2606:4700:4700::1111']);
+});
+
+test('an invalid DNS override fails before connecting without exposing its value', (t) => {
+  const root = fixture(t);
+  const connection = JSON.stringify(path.join(root, 'server/config/connection.js'));
+  const marker = 'invalid-private-dns-value-for-test';
+  const result = run(root, `require(${connection});`, { MONGODB_URI: 'mongodb://127.0.0.1:27017/test', DNS_SERVERS: '8.8.8.8,' + marker });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /DNS_SERVERS must be a comma-separated list of IP addresses/);
+  assert.doesNotMatch(result.stderr, new RegExp(marker));
+  assert.doesNotMatch(result.stdout, /connected:/);
+});

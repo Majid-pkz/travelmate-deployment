@@ -59,7 +59,23 @@ Run the configuration checks without installing third-party packages:
 npm run test:config
 ```
 
-These checks verify environment loading, runtime-variable precedence and required
-secret validation. They do not verify database connectivity or complete user flows.
+These checks verify environment loading, runtime-variable precedence, required
+secret validation and optional DNS configuration. They do not verify database connectivity or complete user flows.
 Dependency installation and end-to-end validation are the next modernization stage.
 
+## Optional local DNS override
+
+If the server reports `querySrv ECONNREFUSED` but `nslookup` successfully resolves
+Atlas's SRV record, you can configure a working DNS resolver for the Node process.
+For example, add this line to your private root `.env` after checking that Google
+Public DNS resolves your cluster:
+
+```dotenv
+DNS_SERVERS=8.8.8.8,8.8.4.4
+```
+
+Then restart the backend with `npm start` from the `server` directory. This optional
+setting accepts comma-separated IPv4 or IPv6 addresses and is applied before the
+database connection starts. It affects Node's DNS resolution in this process.
+Leave it blank or omit it to use the normal resolver in other environments,
+including hosting. Hosted values take precedence over a local file.
