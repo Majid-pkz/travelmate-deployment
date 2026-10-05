@@ -30,10 +30,17 @@ const Header = () => {
             <img src={Logo} height={150} alt="Logo" />
           </NavLink>
         </div>
-        <div className="menu-icon" onClick={handleShowNavbar}>
+        <button
+          type="button"
+          className="menu-icon"
+          onClick={handleShowNavbar}
+          aria-label={showNavbar ? 'Close navigation' : 'Open navigation'}
+          aria-expanded={showNavbar}
+          aria-controls="navigation-links"
+        >
           <MenuIcon />
-        </div>
-        <div className={`nav-elements  ${showNavbar && 'active'}`}>
+        </button>
+        <div id="navigation-links" className={`nav-elements  ${showNavbar && 'active'}`}>
           {Auth.loggedIn() ? (
             <ul>
               <li>

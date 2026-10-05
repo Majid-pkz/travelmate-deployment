@@ -105,7 +105,11 @@ const PersonalProfile = () => {
   </div>
 </div>
               
-              {!isEditing && <i className="far fa-edit mb-5" onClick={() => setIsEditing(true)}></i>}
+              {!isEditing && (
+                <button type="button" className="btn btn-link mb-5" onClick={() => setIsEditing(true)}>
+                  Edit profile
+                </button>
+              )}
             </div>
             <div className="col-md-8">
               <div className="card-body p-4">
