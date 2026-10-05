@@ -2,7 +2,7 @@ name: Frontend checks
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, codex/vite-verification]
 permissions:
   contents: read
 jobs:
