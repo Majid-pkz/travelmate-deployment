@@ -68,7 +68,7 @@ export default function StartTrip() {
       'aria-invalid': Boolean(visibleError(name)), 'aria-describedby': visibleError(name) ? id + '-error' : undefined };
     return <div className="form-field form-field--wide"><label htmlFor={id}>{label}</label>
       {multiline ? <textarea {...attrs} rows={4} /> : <input {...attrs} type="text" />}
-      {visibleError(name) && <small id={id + '-error'} className="form-error">{visibleError(name)}</small>}
+      <small id={id + '-error'} className={`form-feedback${visibleError(name) ? ' form-error' : ''}`}>{visibleError(name) || ' '}</small>
     </div>;
   }
   if (!userId) return <Navigate to="/login" replace />;
@@ -103,7 +103,7 @@ export default function StartTrip() {
                 min={name === 'endDate' ? values.startDate || todayValue() : todayValue()} value={values[name]}
                 onChange={event => change(name, event.target.value)} onBlur={() => touch(name)} aria-invalid={Boolean(visibleError(name))}
                 aria-describedby={visibleError(name) ? name + '-error' : undefined} />
-              {visibleError(name) && <small id={name + '-error'} className="form-error">{visibleError(name)}</small>}
+              <small id={name + '-error'} className={`form-feedback${visibleError(name) ? ' form-error' : ''}`}>{visibleError(name) || ' '}</small>
             </div>)}
             <div className="form-field form-field--wide"><TripPhotoPicker label="Trip photo (optional)" file={photo} onChange={choosePhoto} disabled={saving} />
               {photoError && <p className="form-error" role="alert">{photoError}</p>}</div>

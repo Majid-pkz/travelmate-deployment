@@ -126,6 +126,9 @@ async function checkFrontend(browser, mode) {
 
     await page.goto(base, { waitUntil: 'domcontentloaded' });
     await page.getByRole('heading', { name: /Welcome to Travelmate/i }).waitFor();
+    const cityToken = 'e30.' + Buffer.from(JSON.stringify({ data: { _id: currentUser }, exp: Math.floor(Date.now() / 1000) + 3600 })).toString('base64url') + '.smoke';
+    await page.evaluate(value => localStorage.setItem('id_token', value), cityToken);
+    await page.goto(base);
     const city = page.getByRole('combobox', { name: 'Departure location', exact: true });
     await city.fill('syd');
     await page.getByRole('option', { name: /Sydney.*Australia/ }).waitFor();
@@ -144,6 +147,7 @@ async function checkFrontend(browser, mode) {
     await page.getByText('Suggestions are unavailable. You can still enter a location.', { exact: true }).waitFor();
     await city.press('Enter');
     await page.waitForURL(base + '/trips?search=Offline');
+    await page.evaluate(() => localStorage.removeItem('id_token'));
     await page.goto(base);
     await page.getByRole('heading', { name: /Welcome to Travelmate/i }).waitFor();
     const slide = page.getByRole('button', { name: 'Show slide 2' });
@@ -227,6 +231,10 @@ async function checkFrontend(browser, mode) {
     await open.getByText('Joined', { exact: true }).waitFor();
     assert.deepEqual(errors, [], 'Pages should render without JavaScript errors');
     console.log(mode + ': page rendering, trip membership states, equal card heights, avatar fallbacks, global city selection, Enter search, provider fallback, keyboard details, mobile layout, private routes and proxies passed');
+  } catch (failure) {
+    const page = context?.pages()[0];
+    if (page) console.log('Browser failure context:', JSON.stringify({ url: page.url(), text: await page.locator('body').innerText() }));
+    throw failure;
   } finally {
     if (context) await context.close();
     if (child.exitCode === null) {

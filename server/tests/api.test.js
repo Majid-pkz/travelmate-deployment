@@ -276,7 +276,7 @@ test('account, profile, trip and photo flows enforce ownership against a real di
         const context = await browser.newContext({ timezoneId: 'Australia/Sydney', viewport: { width: 1280, height: 800 } });
         const page = await context.newPage();
         const errors = [];
-        page.on('pageerror', error => errors.push(error.message));
+        page.on('pageerror', error => { errors.push(error.message); console.error('Browser error:', error.message); });
         await page.route('**/*', route => route.request().url().startsWith(base) ? route.continue() : route.abort());
         await page.route(base + '/api/locations?*', route => route.fulfill({ contentType: 'application/json', body: JSON.stringify({ locations: [
           { id: '2147714', name: 'Sydney', region: 'New South Wales', country: 'Australia' },
@@ -460,6 +460,11 @@ test('account, profile, trip and photo flows enforce ownership against a real di
         assert.equal(await page.getByRole('img', { name: 'Browser travellers trip', exact: true }).getAttribute('src'), updatedTripImage);
         assert.deepEqual(errors, [], 'Real account/trip pages should render without JavaScript errors');
         console.log('Production browser profile redesign, hidden photo controls, delayed validation, city keyboard selection and Enter form submission passed');
+      } catch (failure) {
+        const page = browser.contexts()[0]?.pages()[0];
+        if (page) console.log('Browser failure context:', JSON.stringify({ url: page.url(), text: await page.locator('main').innerText(),
+          forms: await page.locator('form').evaluateAll(forms => forms.map(form => ({ noValidate: form.noValidate, controls: [...form.elements].map(input => ({ name: input.name, type: input.type, disabled: input.disabled })) }))) }));
+        throw failure;
       } finally { await browser.close(); }
     });
   }

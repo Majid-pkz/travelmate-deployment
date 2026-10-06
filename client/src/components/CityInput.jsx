@@ -72,7 +72,7 @@ export default function CityInput({ value = '', onChange, onBlur, label, error, 
         {selected?.name === value ? [selected.region, selected.country].filter(Boolean).join(', ')
           : focused && current.length >= 3 ? status : 'Type 3 or more letters for city suggestions, or enter a location.'}
       </small>
-      {error && <small id={`${id}-error`} className="form-error">{error}</small>}
+      {(inputProps.required || error) && <small id={`${id}-error`} className={`form-feedback${error ? ' form-error' : ''}`}>{error || ' '}</small>}
     </div>
   );
 }

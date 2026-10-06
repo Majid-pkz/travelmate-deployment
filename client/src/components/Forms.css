@@ -17,6 +17,7 @@
 .form-panel input[aria-invalid="true"], .form-panel textarea[aria-invalid="true"] { border-color: #a63e31; }
 .form-panel input:focus, .form-panel select:focus, .form-panel textarea:focus { outline: 2px solid #7eaa8d; outline-offset: 1px; }
 .form-error { display: block; color: #a63e31; font-size: .76rem; line-height: 1.5; margin-top: 5px; }
+.form-feedback { display: block; min-height: 1.5em; font-size: .76rem; line-height: 1.5; margin-top: 5px; }
 .form-helper { display: block; font-size: .76rem; color: #63716a; margin-top: 5px; }
 .form-actions { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 24px; align-items: center; }
 .account-button { display: inline-flex; align-items: center; justify-content: center; border: 1px solid #305d48; border-radius: 8px; background: #305d48; color: #fff; padding: 10px 18px; font-size: .85rem; font-weight: 600; line-height: 1.4; text-decoration: none; }
