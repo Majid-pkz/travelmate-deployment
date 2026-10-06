@@ -31,7 +31,7 @@ export default function PersonalProfile() {
   const [failedImage, setFailedImage] = useState(null);
   const photoButton = useRef(null);
   if (!userId) return <Navigate to="/login" replace />;
-  if (loading && !data) return <main className="account-page"><output>Loading profile…</output></main>;
+  if (loading && !data?.profile) return <main className="account-page"><output>Loading profile…</output></main>;
   if (error) return <main className="account-page"><p role="alert">Could not load your profile. Please try again.</p></main>;
   if (!data?.profile) return <Navigate to="/create-profile" replace />;
   const profile = data.profile;

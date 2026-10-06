@@ -14,7 +14,7 @@ export default function Profile() {
   const [values, setValues] = useState({ location: '', gender: '', age: '', bio: '' });
   const [interests, setInterests] = useState([]);
   const { data: interestData } = useQuery(QUERY_INTEREST);
-  const { loading, data: existing } = useQuery(PROFILE_EXISTS, { variables: { profileUser: userId }, skip: !userId });
+  const { loading, data: existing } = useQuery(PROFILE_EXISTS, { variables: { profileUser: userId }, skip: !userId, fetchPolicy: 'cache-and-network' });
   const [createProfile, { error, loading: saving }] = useMutation(CREATE_PROFILE);
   const options = (interestData?.interests ?? []).filter(Boolean).map(item => ({ value: item._id, label: Array.isArray(item.label) ? item.label.join(', ') : item.label }));
   const change = (name, value) => setValues(current => ({ ...current, [name]: value }));
