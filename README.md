@@ -142,7 +142,13 @@ account owners and participants on the same trip, rather than public visitors.
 
 Private pages redirect anonymous, expired or malformed sessions to login.
 An account without a profile opens the creation form. My trips includes both
-organized and joined trips.
+organized and joined trips in separate sections. Search and My trips share compact
+cards with organizer profile photos (or initials), readable description previews,
+and expandable trip details. Your trips carry an amber Organizing badge; joined
+trips carry a green Joined badge and background. Joining does not change a card's
+collapsed height. Organizers cannot join their own trip, including through the API.
+Older self-membership records display the account only as organizer without deleting
+stored records. Profile photos on trip cards reflect the organizer's current photo.
 
 Authenticated users with a profile can upload PNG/JPEG photos up to 2 MB.
 The server validates and re-encodes them, limits input to 16 million pixels,

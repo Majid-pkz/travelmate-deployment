@@ -9,14 +9,43 @@ import { chromium } from 'playwright';
 const base = 'http://127.0.0.1:3000';
 const clientRoot = fileURLToPath(new URL('../', import.meta.url));
 const viteEntry = fileURLToPath(new URL('../node_modules/vite/bin/vite.js', import.meta.url));
+const currentUser = '0123456789abcdef01234567';
+let smokeJoined = false;
+const longDescription = 'Meet in Sydney for a relaxed weekend in the Blue Mountains. We will walk the forest trails, share lunch, and stop at scenic lookouts. Bring comfortable shoes, water, and your favourite snacks.';
+function stateTrips() {
+  const baseTrip = {
+    __typename: 'Trip', description: longDescription, departureLocation: 'Sydney',
+    destination: 'Blue Mountains', startDate: '2026-10-10T00:00:00.000Z', endDate: '2026-10-12T00:00:00.000Z',
+    image: null, meetupPoint: 'Central Station', creatorProfileImage: '/api/images/profile/smoke',
+    creator: { __typename: 'User', _id: 'other-user', firstname: 'Maya', lastname: 'Traveller', email: null },
+  };
+  return [
+    { ...baseTrip, _id: 'own-trip', title: 'Your weekend getaway', creatorProfileImage: '/api/images/profile/missing',
+      creator: { __typename: 'User', _id: currentUser, firstname: 'Sam', lastname: 'Traveller', email: 'sam@example.com' },
+      travelmates: [{ __typename: 'User', _id: currentUser, firstname: 'Sam' }] },
+    { ...baseTrip, _id: 'joined-trip', title: 'A much longer trip title that should wrap neatly onto two lines',
+      travelmates: [{ __typename: 'User', _id: currentUser, firstname: 'Sam' }] },
+    { ...baseTrip, _id: 'open-trip', title: 'Mountain trails', description: 'A short description.',
+      travelmates: smokeJoined ? [{ __typename: 'User', _id: currentUser, firstname: 'Sam' }] : [] },
+  ];
+}
 const api = createServer(async (request, response) => {
   let body = '';
   for await (const chunk of request) body += chunk;
+  if (request.url === '/api/images/profile/smoke') {
+    response.setHeader('Content-Type', 'image/png');
+    response.end(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAACXBIWXMAAAPoAAAD6AG1e1JrAAAAGElEQVQokWMwiPUgCTGMaogdDSWD4Zo0ACYq1QHqHzv3AAAAAElFTkSuQmCC', 'base64'));
+    return;
+  }
+  if (request.url === '/api/images/profile/missing') { response.writeHead(404).end(); return; }
   response.setHeader('Content-Type', 'application/json');
-  if (request.url === '/graphql') {
+  if (request.url === '/graphql' && body.includes('joinTrip')) {
+    smokeJoined = true;
+    response.end(JSON.stringify({ data: { joinTrip: stateTrips()[2] } }));
+  } else if (request.url === '/graphql') {
     response.end(JSON.stringify({
       data: body.includes('searchTrips') ? {
-        searchTrips: body.includes('NoMatches') ? [] : [{
+        searchTrips: body.includes('NoMatches') ? [] : body.includes('States') ? stateTrips() : [{
           __typename: 'Trip', _id: 'smoke-trip', title: 'Sydney road trip',
           description: 'A trip used only by the frontend smoke test.',
           departureLocation: 'Sydney', destination: 'Blue Mountains',
@@ -25,7 +54,7 @@ const api = createServer(async (request, response) => {
             __typename: 'User', _id: 'smoke-user', firstname: 'Test',
             lastname: 'Traveller', email: 'test@example.com',
           },
-          travelmates: [],
+          creatorProfileImage: null, meetupPoint: null, travelmates: [],
           image: body.includes('BrokenPhoto') ? '/api/images/trips/missing' : null,
         }],
       } : { __typename: 'Query' },
@@ -126,7 +155,7 @@ async function checkFrontend(browser, mode) {
     await page.goto(base + '/missing-page', { waitUntil: 'domcontentloaded' });
     await page.getByRole('heading', { name: 'No match for /missing-page' }).waitFor();
     await page.goto(base + '/trips?search=Sydney', { waitUntil: 'domcontentloaded' });
-    await page.getByText(/Departure Location:.*Sydney/).waitFor();
+    await page.getByRole('heading', { name: 'Sydney road trip', exact: true }).waitFor();
     await page.waitForFunction(() => document.querySelector('img[alt="Sydney road trip"]')?.naturalWidth > 0);
     assert.match(await page.getByRole('img', { name: 'Sydney road trip', exact: true }).getAttribute('src'), /oceanView/);
     await page.getByRole('button', { name: 'Join Trip' }).click();
@@ -138,8 +167,39 @@ async function checkFrontend(browser, mode) {
     });
     await page.goto(base + '/trips?search=NoMatches', { waitUntil: 'domcontentloaded' });
     await page.getByText('No trips found. Try Again!').waitFor();
+    smokeJoined = false;
+    const token = 'e30.' + Buffer.from(JSON.stringify({ data: { _id: currentUser }, exp: Math.floor(Date.now() / 1000) + 3600 })).toString('base64url') + '.smoke';
+    await page.evaluate(value => localStorage.setItem('id_token', value), token);
+    await page.goto(base + '/trips?search=States', { waitUntil: 'domcontentloaded' });
+    const owned = page.getByRole('article', { name: 'Your weekend getaway', exact: true });
+    const joined = page.getByRole('article', { name: 'A much longer trip title that should wrap neatly onto two lines', exact: true });
+    const open = page.getByRole('article', { name: 'Mountain trails', exact: true });
+    await owned.getByText('Organizing', { exact: true }).waitFor();
+    await joined.getByText('Joined', { exact: true }).waitFor();
+    await open.getByText('Open trip', { exact: true }).waitFor();
+    assert.equal(await owned.getByRole('button', { name: 'Join Trip' }).count(), 0);
+    assert.equal(await joined.getByRole('button', { name: 'Join Trip' }).count(), 0);
+    await owned.locator('.trip-card__avatar').getByText('ST', { exact: true }).waitFor();
+    await page.waitForFunction(() => [...document.querySelectorAll('.trip-card__avatar img')].every(image => image.naturalWidth > 0));
+    const heights = await page.locator('.trip-card').evaluateAll(cards => cards.map(card => card.getBoundingClientRect().height));
+    assert.ok(Math.max(...heights) - Math.min(...heights) < 1, 'Owned, joined and open cards must have equal collapsed heights');
+    const beforeJoin = (await open.boundingBox()).height;
+    await open.getByRole('button', { name: 'Join Trip', exact: true }).click();
+    await open.getByText('Joined', { exact: true }).waitFor();
+    assert.ok(Math.abs((await open.boundingBox()).height - beforeJoin) < 1, 'Joining must not grow the card');
+    await owned.locator('summary').focus();
+    await owned.locator('summary').press('Enter');
+    await owned.locator('.trip-card__detail-content').getByText(longDescription, { exact: true }).waitFor();
+    await owned.getByText('Central Station', { exact: false }).waitFor();
+    await owned.locator('summary').press('Enter');
+    await page.setViewportSize({ width: 390, height: 844 });
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), 'Trip cards must fit a mobile screen');
+    for (const card of [owned, joined, open]) assert.ok((await card.boundingBox()).width <= 358);
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.reload();
+    await open.getByText('Joined', { exact: true }).waitFor();
     assert.deepEqual(errors, [], 'Pages should render without JavaScript errors');
-    console.log(mode + ': page rendering, keyboard controls, private routes, invalid sessions, deep links and proxies passed');
+    console.log(mode + ': page rendering, trip membership states, equal card heights, avatar fallbacks, keyboard details, mobile layout, private routes and proxies passed');
   } finally {
     if (context) await context.close();
     if (child.exitCode === null) {

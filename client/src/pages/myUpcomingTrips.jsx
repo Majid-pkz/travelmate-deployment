@@ -1,81 +1,41 @@
-import React from 'react';
 import { useQuery } from '@apollo/client';
-import { defaultTripPhoto, showDefaultTripPhoto } from '../utils/tripPhotos';
-import TripPhotoUpload from '../components/TripPhotoUpload';
+import { Link, Navigate } from 'react-router-dom';
+import TripCard from '../components/TripCard';
 import { QUERY_MY_TRIPS } from '../utils/queries';
 import Auth from '../utils/auth';
-import { Navigate } from 'react-router-dom';
 
-const MyUpcomingTrips = () => {
+export default function MyUpcomingTrips() {
   const userId = Auth.getProfile()?.data?._id;
   const { loading, error, data, refetch } = useQuery(QUERY_MY_TRIPS, {
-    variables: { travelmates: userId },
-    skip: !userId,
-    fetchPolicy: 'cache-and-network',
+    variables: { travelmates: userId }, skip: !userId, fetchPolicy: 'cache-and-network',
   });
-//   console.log(data.myTrips)
-const formatDate = (dateString) => {
-    const date = new Date(dateString);
-    const day = date.getDate().toString().padStart(2, '0');
-    const month = (date.getMonth() + 1).toString().padStart(2, '0');
-    const year = date.getFullYear().toString();
-    return `${day}/${month}/${year}`;
-  };
-
   if (!userId) return <Navigate to="/login" replace />;
-  if (loading && !data) {
-    return <div>Loading...</div>;
-  }
-
-  if (error) {
-    return <div>Error: {error.message}</div>;
-  }
-
-  const { myTrips } = data;
-
-  if (!myTrips || myTrips.length === 0) {
-    return <div>No trips found.</div>;
-  }
+  const trips = data?.myTrips ?? [];
+  const organizing = trips.filter(trip => trip.creator?._id === userId);
+  const joined = trips.filter(trip => trip.creator?._id !== userId);
 
   return (
-    <div className="row">
-    {myTrips.map((trip) => (
-      <div key={trip._id} className="col-md-6 col-lg-4" style={{paddingLeft:'20px', paddingRight:'25px', width: '100%'}}>
-        <div className="card shadow ">
-          {/* Display trip details */}
-          <img src={trip.image || defaultTripPhoto} alt={trip.title} onError={showDefaultTripPhoto}
-            className="card-img-top" height={300} width="100%" style={{ objectFit: 'cover' }} />
-          <div className="card-body">
-            <h2 className="card-title" style={{ color: '#333333' }}>
-              {trip.title}
-            </h2>
-            <p className="card-text">{trip.description}</p>
-            <p className="card-text" style={{ color: '#333333' }}>
-              Departure: {trip.departureLocation}
-            </p>
-            <p className="card-text" style={{ color: '#333333' }}>
-              Destination: {trip.destination}
-            </p>
-            <p className="card-text" style={{ color: '#333333' }}>
-              Start Date: {` ${formatDate(trip.startDate)}`}
-            </p>
-            <p className="card-text" style={{ color: '#333333' }}>
-              End Date: {formatDate(trip.endDate)}
-            </p>
-
-            <h3>Travelmates:</h3>
-            {trip.travelmates.map((travelmate) => (
-              <div key={travelmate._id}>
-                <p style={{ color: '#333333' }}>{travelmate.firstname}{travelmate.email && <> - <a href={'mailto:' + travelmate.email}>{travelmate.email}</a></>}</p>
-              </div>
-            ))}
-            {trip.creator?._id === userId && <TripPhotoUpload trip={trip} onUploaded={refetch} />}
-          </div>
-        </div>
+    <main className="trip-page">
+      <div className="trip-page__heading">
+        <h1>My trips</h1>
+        <p>Your plans, whether you're bringing people together or joining the adventure.</p>
       </div>
-    ))}
-  </div>
+      {loading && !data ? <output>Loading trips…</output>
+        : error ? <p role="alert">Could not load your trips. Please try again.</p>
+          : <>
+            <section className="trip-page__section" aria-labelledby="organizing-heading">
+              <h2 id="organizing-heading" className="trip-page__section-title">Organizing <span>({organizing.length})</span></h2>
+              {organizing.length ? <div className="trip-grid">
+                {organizing.map(trip => <TripCard trip={trip} view="mine" onPhotoUploaded={refetch} key={trip._id} />)}
+              </div> : <p className="trip-page__empty">No trips created yet. <Link to="/new-trip">Start a new trip</Link></p>}
+            </section>
+            <section className="trip-page__section" aria-labelledby="joined-heading">
+              <h2 id="joined-heading" className="trip-page__section-title">Joined <span>({joined.length})</span></h2>
+              {joined.length ? <div className="trip-grid">
+                {joined.map(trip => <TripCard trip={trip} view="mine" key={trip._id} />)}
+              </div> : <p className="trip-page__empty">No trips joined yet. <Link to="/trips">Explore trips</Link></p>}
+            </section>
+          </>}
+    </main>
   );
-};
-
-export default MyUpcomingTrips;
+}

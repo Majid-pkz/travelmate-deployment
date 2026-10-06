@@ -123,6 +123,17 @@ test('account, profile, trip and photo flows enforce ownership against a real di
     assert.equal((await Trip.findById(aliceTrip._id)).travelmates.length, 1);
     assert.equal(success(await query(userQuery, { id: alice.user._id }, bob.token)).user.email, 'alice@example.com');
   });
+  await t.test('organizers cannot join their own trip, including legacy records with self-membership', async () => {
+    const selfJoin = await query(join, { trip: aliceTrip._id, user: alice.user._id }, alice.token);
+    denied(selfJoin, 'FORBIDDEN');
+    assert.equal(selfJoin.errors[0].message, "You're already organizing this trip.");
+    assert.equal((await Trip.findById(aliceTrip._id)).travelmates.length, 1);
+    await Trip.updateOne({ _id: aliceTrip._id }, { $addToSet: { travelmates: alice.user._id } });
+    const trip = success(await query('query($id:ID!){trip(id:$id){creator{_id} travelmates{_id}}}', { id: aliceTrip._id })).trip;
+    assert.deepEqual(trip.travelmates.map(user => user._id), [bob.user._id]);
+    assert.equal((await Trip.findById(aliceTrip._id)).travelmates.length, 2, 'Displaying old records must not delete stored data');
+    denied(await query(join, { trip: aliceTrip._id, user: alice.user._id }, alice.token), 'FORBIDDEN');
+  });
   await t.test('trip/profile populations and literal searches return valid results', async () => {
     const result = success(await query('query($term:String){searchTrips(departureLocation:$term){_id creator{firstname} travelmates{firstname email}}}', { term: '(West)' }, alice.token));
     assert.equal(result.searchTrips.length, 2);
@@ -150,6 +161,19 @@ test('account, profile, trip and photo flows enforce ownership against a real di
     assert.ok(metadata.width <= 512 && metadata.height <= 512);
     const privateProfile = await fetch(base + '/api/images/profile', { headers: { authorization: 'Bearer ' + alice.token } });
     assert.equal((await privateProfile.json()).imageData, undefined);
+  });
+  await t.test('trip cards expose the current organizer photo without exposing private profile data', async () => {
+    const result = success(await query('{searchTrips{_id creatorProfileImage creator{email}}}')).searchTrips;
+    assert.equal(result.find(trip => trip._id === aliceTrip._id).creatorProfileImage, aliceProfileImage);
+    assert.equal(result.find(trip => trip._id === bobTrip._id).creatorProfileImage, null);
+    assert.ok(result.every(trip => trip.creator.email === null));
+    const own = success(await query('query($user:ID!){myTrips(travelmates:$user){_id creatorProfileImage}}', { user: alice.user._id }, alice.token)).myTrips;
+    assert.equal(own[0].creatorProfileImage, aliceProfileImage);
+    success(await query('{profiles{createdTrips{creatorProfileImage}}}'));
+    await Profile.updateOne({ _id: aliceProfile._id }, { $set: { image: aliceProfileImage + '&replacement=test' } });
+    const changed = success(await query('query($id:ID!){trip(id:$id){creatorProfileImage}}', { id: aliceTrip._id })).trip;
+    assert.equal(changed.creatorProfileImage, aliceProfileImage + '&replacement=test');
+    await Profile.updateOne({ _id: aliceProfile._id }, { $set: { image: aliceProfileImage } });
   });
   await t.test('only the organizer can add or replace a validated trip photo; photos are optional and stay out of JSON', async () => {
     const path = '/api/images/trips/' + aliceTrip._id;
@@ -343,7 +367,7 @@ test('account, profile, trip and photo flows enforce ownership against a real di
         }, firstTripImage);
         const updatedTripImage = await page.getByRole('img', { name: 'Browser travellers trip', exact: true }).getAttribute('src');
         await page.getByRole('link', { name: 'Start a New Trip', exact: true }).click();
-        await fillTrip('Trip without photo', 'Other departure');
+        await fillTrip('Trip without photo', 'Browser departure');
         await page.getByRole('button', { name: 'Submit', exact: true }).click();
         await page.getByText(/Success! You may now head/).waitFor();
         await page.getByRole('link', { name: 'My trips', exact: true }).click();
@@ -354,16 +378,43 @@ test('account, profile, trip and photo flows enforce ownership against a real di
 
         await signup('Dan', 'dan-browser@example.com');
         await createProfile();
+        await page.getByRole('link', { name: 'Start a New Trip', exact: true }).click();
+        await fillTrip('Dan organizes a trip', 'Browser departure');
+        await page.getByRole('button', { name: 'Submit', exact: true }).click();
+        await page.getByText(/Success! You may now head/).waitFor();
         await page.goto(base + '/');
         await page.getByRole('searchbox', { name: 'Departure location' }).fill('Browser departure');
         await page.getByRole('button', { name: 'Search trips', exact: true }).click();
         await page.getByRole('img', { name: 'Browser travellers trip', exact: true }).waitFor();
         assert.equal(await page.getByRole('img', { name: 'Browser travellers trip', exact: true }).getAttribute('src'), updatedTripImage);
-        await page.getByRole('button', { name: 'Join Trip', exact: true }).click();
-        await page.getByText('Successfully joined the trip!', { exact: false }).waitFor();
-        await page.getByRole('link', { name: 'View your trips', exact: true }).click();
+        const tripCard = page.getByRole('article', { name: 'Browser travellers trip', exact: true });
+        const ownCard = page.getByRole('article', { name: 'Dan organizes a trip', exact: true });
+        await ownCard.getByText('Organizing', { exact: true }).waitFor();
+        assert.equal(await ownCard.getByRole('button', { name: 'Join Trip' }).count(), 0);
+        await tripCard.getByRole('img', { name: "Carol Browser Tester's profile", exact: true }).waitFor();
+        await page.waitForFunction(() => [...document.querySelectorAll('.trip-card__avatar img')].every(image => image.naturalWidth > 0));
+        const heightBeforeJoin = (await tripCard.boundingBox()).height;
+        await tripCard.getByRole('button', { name: 'Join Trip', exact: true }).click();
+        await tripCard.getByText("You're on the list", { exact: false }).waitFor();
+        await tripCard.getByText('Joined', { exact: true }).waitFor();
+        assert.ok(Math.abs((await tripCard.boundingBox()).height - heightBeforeJoin) < 1, 'Joining must not make the card taller');
+        assert.ok(await tripCard.evaluate(card => card.classList.contains('trip-card--joined')));
+        await page.reload();
+        await tripCard.getByText('Joined', { exact: true }).waitFor();
+        assert.equal(await tripCard.getByRole('button', { name: 'Join Trip' }).count(), 0);
+        await tripCard.getByRole('link', { name: 'View your trips', exact: true }).click();
         await page.getByRole('heading', { name: 'Browser travellers trip' }).waitFor();
-        assert.equal(await page.getByRole('button', { name: /(?:Add|Change) trip photo/ }).count(), 0);
+        const joinedSection = page.getByRole('region', { name: 'Joined (1)', exact: true });
+        const organizingSection = page.getByRole('region', { name: 'Organizing (1)', exact: true });
+        await joinedSection.getByRole('heading', { name: 'Browser travellers trip', exact: true }).waitFor();
+        await organizingSection.getByRole('heading', { name: 'Dan organizes a trip', exact: true }).waitFor();
+        assert.equal(await joinedSection.getByRole('button', { name: /(?:Add|Change) trip photo/ }).count(), 0);
+        assert.equal(await organizingSection.getByRole('button', { name: 'Add trip photo' }).count(), 1);
+        await joinedSection.locator('summary').click();
+        await joinedSection.getByRole('link', { name: 'dan-browser@example.com', exact: true }).waitFor();
+        await page.setViewportSize({ width: 390, height: 844 });
+        assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), 'My trips must fit a mobile screen');
+        await page.setViewportSize({ width: 1280, height: 800 });
         await page.getByRole('link', { name: 'Logout', exact: true }).click();
         await page.goto(base + '/login');
         await page.getByLabel('Email address').fill('carol-browser@example.com');
@@ -376,7 +427,7 @@ test('account, profile, trip and photo flows enforce ownership against a real di
         await page.getByRole('heading', { name: 'Browser travellers trip' }).waitFor();
         assert.equal(await page.getByRole('img', { name: 'Browser travellers trip', exact: true }).getAttribute('src'), updatedTripImage);
         assert.deepEqual(errors, [], 'Real account/trip pages should render without JavaScript errors');
-        console.log('Production browser account/profile/trip/photo flows, upload retry, replacement and default photos passed');
+        console.log('Production browser account/profile/trip/photo flows, organizing/joined sections, organizer avatars and stable card heights passed');
       } finally { await browser.close(); }
     });
   }

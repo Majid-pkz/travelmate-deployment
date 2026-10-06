@@ -23,7 +23,7 @@ export default function TripPhotoUpload({ trip, onUploaded }) {
     finally { setBusy(false); }
   }
   return (
-    <div className="mt-3">
+    <div className="trip-photo-upload">
       <button type="button" className="btn btn-outline-primary" disabled={busy}
         aria-expanded={open} onClick={() => { setOpen(!open); setMessage(''); }}>
         {trip.image ? 'Change trip photo' : 'Add trip photo'}

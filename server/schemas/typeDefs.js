@@ -12,6 +12,7 @@ const typeDefs = `
   type Trip {
     _id: ID!
     creator: User!
+    creatorProfileImage: String
     title: String!
     description: String
     departureLocation: String!

@@ -2,7 +2,11 @@ const { Trip, User, TripType, Profile, Interest } = require('../models');
 const { signToken } = require('../utils/auth');
 const access = require('../utils/access');
 
-const tripPopulation = 'creator tripType travelmates';
+const tripPopulation = [
+  { path: 'creator', populate: { path: 'publicProfile', select: 'image profileUser' } },
+  { path: 'tripType' },
+  { path: 'travelmates' },
+];
 const profilePopulation = [
   { path: 'profileUser' },
   { path: 'interests' },
@@ -63,7 +67,9 @@ const resolvers = {
     joinedDate: (profile) => profile.joinedDate ? new Date(profile.joinedDate).toISOString() : null,
   },
   Trip: {
-    travelmates: (trip) => (trip.travelmates ?? []).filter(Boolean),
+    creatorProfileImage: (trip) => trip.creator?.publicProfile?.image ?? null,
+    // Older records may contain the organizer as a member. Display them only as organizer.
+    travelmates: (trip) => (trip.travelmates ?? []).filter(user => user && String(user._id) !== String(trip.creator?._id)),
   },
   Query: {
     users: async (parent, args, context) => {
@@ -200,9 +206,12 @@ const resolvers = {
     },
     joinTrip: async (parent, { id, userJoining }, context) => {
       const user = await access.self(context, userJoining);
+      const tripId = access.id(id);
+      const existing = access.notFound(await Trip.findById(tripId).select('creator'), 'Trip');
+      if (String(existing.creator) === String(user._id)) access.fail("You're already organizing this trip.", 'FORBIDDEN');
       if (!await Profile.exists({ profileUser: user._id })) access.fail('Create your profile before joining a trip.');
       const trip = await Trip.findOneAndUpdate(
-        { _id: access.id(id) }, { $addToSet: { travelmates: user._id } }, { new: true },
+        { _id: tripId, creator: { $ne: user._id } }, { $addToSet: { travelmates: user._id } }, { new: true },
       ).populate(tripPopulation);
       return access.notFound(trip, 'Trip');
     },

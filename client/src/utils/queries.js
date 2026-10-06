@@ -34,7 +34,10 @@ export const QUERY_MY_TRIPS = gql`
       _id
       creator {
         _id
+        firstname
+        lastname
       }
+      creatorProfileImage
       title
       departureLocation
       description
@@ -42,6 +45,7 @@ export const QUERY_MY_TRIPS = gql`
       image
       startDate
       endDate
+      meetupPoint
       travelmates {
         _id
         email
@@ -151,6 +155,7 @@ query SearchTrips($departureLocation: String) {
       email
       isAdmin
     }
+    creatorProfileImage
     title
     description
     departureLocation

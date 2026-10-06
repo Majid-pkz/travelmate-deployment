@@ -45,6 +45,11 @@ const userSchema = new Schema(
  
 );
 
+// Populate only the public photo when displaying a trip's organizer.
+userSchema.virtual('publicProfile', {
+  ref: 'Profile', localField: '_id', foreignField: 'profileUser', justOne: true,
+});
+
 // hash user password
 userSchema.pre('save', async function () {
   if (this.isNew || this.isModified('password')) {
