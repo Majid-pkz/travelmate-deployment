@@ -1,6 +1,6 @@
 import React from 'react';
 import { useState } from 'react'
-import { NavLink, Link } from 'react-router-dom';
+import { NavLink, Link, useLocation } from 'react-router-dom';
 import Logo from '../../assets/logo.png';
 import MenuIcon from '@mui/icons-material/Menu';
 import './Header.css'
@@ -9,6 +9,8 @@ import Auth from '../../utils/auth';
 
 const Header = () => {
   const [showNavbar, setShowNavbar] = useState(false)
+  const { pathname } = useLocation();
+  const isProfilePage = pathname === '/my-profile' || pathname === '/create-profile';
 
   const handleShowNavbar = () => {
     setShowNavbar(!showNavbar)
@@ -46,10 +48,11 @@ const Header = () => {
                 </NavLink>
               </li>
               <li>
-                <NavLink onClick={handleShowNavbar} to="/create-profile">
-                  {/* {Auth.getProfile().data.firstname}'s profile */}
+                <Link onClick={handleShowNavbar} to="/my-profile"
+                  className={isProfilePage ? 'active' : undefined}
+                  aria-current={isProfilePage ? 'page' : undefined}>
                   Profile
-                </NavLink>
+                </Link>
               </li>
               <li>
                 <NavLink to="/new-trip" onClick={handleShowNavbar}>
