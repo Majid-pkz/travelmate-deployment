@@ -30,7 +30,7 @@
     background-color: var(--beige);
   }
   
-  .carousel span {
+  .carousel button {
     width: 10px;
     height: 10px;
     background-color: var(--black);
@@ -38,10 +38,10 @@
     margin-top: 10px;
     border-radius: 10px;
     cursor: pointer;
+    border: 0;
+    padding: 0;
   }
   
-  .carousel span.active {
-    background-color: var(--beige); /* Customize the active span color */
-  }
+
 
   

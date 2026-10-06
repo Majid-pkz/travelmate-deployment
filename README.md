@@ -12,7 +12,7 @@ TravelMate is a web application built with the MERN stack and GraphQL. It aims t
 
 ## Technologies Used
 
-* Front-end: React, Apollo Client, HTML, CSS, MaterialUI, Bootstrap
+* Front-end: React, Vite, Apollo Client, HTML, CSS, MaterialUI, Bootstrap
 * Back-end: Node.js, Express, GraphQL, MongoDB
 * Authentication: JWT (JSON Web Tokens)
 * Image Upload: Multer
@@ -27,11 +27,20 @@ Contributions to TravelMate are welcome! If you find any bugs, have suggestions 
 ## 2026 modernization
 
 This branch continues the original 2023 project and preserves its commit history.
-The first update adds private environment configuration and replaces the hardcoded JWT
-secret with a required runtime value. Authorization, password handling, UI
-reliability, dependency updates, durable image uploads and deployment remain in
-progress. This configuration update alone does not make the application ready for
+Private environment configuration replaces the hardcoded JWT secret with a
+required runtime value. The frontend now uses React 18 and Vite, with standalone
+Oxlint checks, updated Axios and React Router 7 packages, and the unused legacy
+libraries removed. React components use the `.jsx` extension; the existing
+application and routes remain in place. Authorization, password handling, UI
+reliability, backend dependency updates, durable image uploads and deployment
+remain in progress. These initial updates do not make the application ready for
 public use.
+
+Page bundles load on demand. Bootstrap CSS is bundled locally, and navigation,
+slideshow and profile-edit controls use keyboard-accessible buttons. Lint checks
+cover JavaScript correctness, hook dependencies and accessibility. React Compiler
+purity and effect-state checks are not enabled because this app does not use the
+React Compiler.
 
 ## Private local configuration
 
@@ -61,7 +70,51 @@ npm run test:config
 
 These checks verify environment loading, runtime-variable precedence, required
 secret validation and optional DNS configuration. They do not verify database connectivity or complete user flows.
-Dependency installation and end-to-end validation are the next modernization stage.
+Complete user flows and backend security still need validation.
+
+## Local frontend development
+
+From the repository root, install the committed frontend dependency versions:
+
+```sh
+npm ci --prefix client
+```
+
+Keep the configured backend running on port 3001 in one terminal. Start the
+frontend in a second terminal:
+
+```sh
+npm start --prefix client
+```
+
+Open `http://localhost:3000`. Vite forwards `/graphql`, `/api` and `/images`
+requests to `http://127.0.0.1:3001`. It refuses to silently choose another port
+when 3000 is already occupied.
+
+## Production frontend build
+
+```sh
+npm run build --prefix client
+```
+
+This command runs lint checks before building. Output remains in `client/build`,
+which matches the existing Express production static-file configuration. To
+check that output locally, stop the frontend development server, leave the
+backend running, and run:
+
+```sh
+npm run preview --prefix client
+```
+
+The local preview uses port 3000 and the same API and image proxies. A deployed
+frontend needs those requests served or forwarded to the deployed backend;
+Vite's local proxy is not part of the static build. Public hosting setup is still
+pending.
+
+GitHub Actions checks installation, lint, build, frontend dependency audit, root
+configuration tests, and development/preview request forwarding. The frontend
+smoke check uses a stub API and does not verify Atlas, account creation, or
+authorization.
 
 ## Optional local DNS override
 

@@ -1,22 +1,22 @@
-import React from 'react';
+import React, { lazy, Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { ApolloClient, ApolloProvider, InMemoryCache, createHttpLink, } from '@apollo/client';
 import { setContext } from '@apollo/client/link/context';
 
 
 import Home from './pages/Home/Home';
-import Signup from './pages/Signup';
-import FileUpload from './pages/FileUpload'
-import RecipeReviewCard from './pages/TestCard'
-import Trip from './pages/Trip'
-import StartTrip from './pages/StartTrip'
+const Signup = lazy(() => import('./pages/Signup'));
+const FileUpload = lazy(() => import('./pages/FileUpload'));
+const RecipeReviewCard = lazy(() => import('./pages/TestCard'));
+const Trip = lazy(() => import('./pages/Trip'));
+const StartTrip = lazy(() => import('./pages/StartTrip'));
 import Header from './components/Header/Header';
 import Footer from './components/Footer/Footer';
-import LoginTest from './pages/Login';
-import MyUpcomingTrips from './pages/myUpcomingTrips';
-import Profile from './pages/createProfile'
-import PersonalProfile from './pages/displayProfile'
-import GroupExample from './pages/ProfileCards'
+const LoginTest = lazy(() => import('./pages/Login'));
+const MyUpcomingTrips = lazy(() => import('./pages/myUpcomingTrips'));
+const Profile = lazy(() => import('./pages/createProfile'));
+const PersonalProfile = lazy(() => import('./pages/displayProfile'));
+const GroupExample = lazy(() => import('./pages/ProfileCards'));
 
 // Construct our main GraphQL API endpoint
 const httpLink = createHttpLink({
@@ -47,6 +47,7 @@ function App() {
     <ApolloProvider client={client}>
       <Router>
         <Header />
+        <Suspense fallback={<output className="d-block text-center py-4">Loading page...</output>}>
         <Routes>
           <Route
             path="/login"
@@ -102,6 +103,7 @@ function App() {
 
 
         </Routes>
+        </Suspense>
         {/* </div> */}
         <Footer />
         {/* </div> */}

@@ -1,0 +1,30 @@
+name: Frontend checks
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: '24'
+      - name: Match the Windows npm version
+        run: npm install --global npm@10.1.0
+      - name: Install the committed frontend dependencies
+        run: npm ci --prefix client
+      - name: Lint and build the frontend
+        run: npm run build --prefix client
+      - name: Audit all frontend dependencies
+        run: npm audit --prefix client --audit-level=low
+      - name: Check private runtime configuration
+        run: npm run test:config
+      - name: Install the smoke-test browser
+        run: npm exec --prefix client -- playwright install --with-deps --only-shell chromium
+      - name: Check browser pages and API forwarding
+        run: npm run test:smoke --prefix client

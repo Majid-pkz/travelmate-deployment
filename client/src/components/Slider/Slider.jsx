@@ -53,7 +53,13 @@ const Slider = () => {
       <div style={bgImageStyle} onLoad={() => setIsLoaded(true)} />
       <div className="carousel">
         {images.map((image, currentState) => (
-          <span key={currentState} onClick={() => goToNext(currentState)}></span>
+          <button
+            key={currentState}
+            type="button"
+            onClick={() => goToNext(currentState)}
+            aria-label={`Show slide ${currentState + 1}`}
+            aria-pressed={current === currentState}
+          />
         ))}
       </div>
     </div>
