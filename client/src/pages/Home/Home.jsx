@@ -19,7 +19,7 @@ const Home = () => {
                         <SearchBarTest />
                     </>
                 ) : (
-                    <p> <Link to="/login"> Login </Link> to browse trips</p>
+                    <p> <Link to="/login"> Log in </Link> to browse trips</p>
                 )}
             </div>
         </div>
@@ -27,7 +27,6 @@ const Home = () => {
 }
 
 export default Home;
-
 
 
 

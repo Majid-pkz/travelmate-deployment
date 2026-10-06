@@ -20,4 +20,5 @@
 .profile-photo-editor { margin-top: 18px; }
 .profile-photo-editor img { width: 120px !important; height: 120px; border-radius: 50%; object-fit: cover !important; display: block; }
 .profile-photo-editor p { font-size: .78rem; color: #63716a; margin: 6px 0 12px; }
+.profile-photo-editor .form-error { color: #a63e31; }
 @media (max-width: 720px) { .profile-layout { grid-template-columns: minmax(0, 1fr); } .profile-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

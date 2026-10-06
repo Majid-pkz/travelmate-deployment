@@ -56,6 +56,22 @@ test('account, profile, trip and photo flows enforce ownership against a real di
     return fetch(base + path, { method: 'POST', headers: token ? { authorization: 'Bearer ' + token } : {}, body: form });
   }
 
+  await t.test('the live city endpoint returns Sydney suggestions or a usable outage response', async () => {
+    const short = await fetch(base + '/api/locations?q=sy');
+    assert.deepEqual(await short.json(), { locations: [] });
+    const response = await fetch(base + '/api/locations?q=syd');
+    const body = await response.json();
+    if (response.status === 200) {
+      assert.ok(body.locations.some(place => place.name === 'Sydney' && place.country === 'Australia'));
+      console.log('Live city lookup confirmed: syd → Sydney, Australia');
+    } else {
+      assert.equal(response.status, 503);
+      assert.deepEqual(body.locations, []);
+      assert.match(body.error, /still enter a location/);
+      console.log('Live city provider unavailable; manual-location fallback confirmed');
+    }
+  });
+
   await t.test('registration normalizes email and hashes passwords; users cannot self-register as administrators', async () => {
     alice = success(await query(registration, { first: 'Alice', email: 'ALICE@EXAMPLE.COM', password: rawPassword })).createUser;
     bob = success(await query(registration, { first: 'Bob', email: 'bob@example.com', password: rawPassword })).createUser;
@@ -375,6 +391,7 @@ test('account, profile, trip and photo flows enforce ownership against a real di
         });
         await page.getByPlaceholder('Title', { exact: true }).press('Enter');
         await page.getByRole('heading', { name: 'Trip created', exact: true }).waitFor();
+        assert.notEqual(await page.getByText('Your adventure is ready for travelmates to join.', { exact: true }).evaluate(element => getComputedStyle(element).color), 'rgb(255, 255, 255)');
         await page.getByText('Temporary test upload failure.', { exact: true }).waitFor();
         const carol = await User.findOne({ email: 'carol-browser@example.com' });
         assert.equal(await Trip.countDocuments({ creator: carol._id }), 1);

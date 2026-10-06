@@ -17,7 +17,7 @@
     margin-bottom: 20px;
 }
 
-p {
+.hero-text p {
     color: white;
     font-size: 20px;
     font-weight: 400;
@@ -37,7 +37,7 @@ p {
         font-size: 35px;
     }
 
-    p {
+    .hero-text p {
         font-size: 18px;
     }
 }
