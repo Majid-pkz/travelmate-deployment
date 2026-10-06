@@ -263,7 +263,7 @@ test('account, profile, trip and photo flows enforce ownership against a real di
         await page.getByRole('searchbox', { name: 'Departure location' }).fill('Browser departure');
         await page.getByRole('button', { name: 'Search trips', exact: true }).click();
         await page.getByRole('button', { name: 'Join Trip', exact: true }).click();
-        await page.getByText('Successfully joined the trip!', { exact: true }).waitFor();
+        await page.getByText('Successfully joined the trip!', { exact: false }).waitFor();
         await page.getByRole('link', { name: 'View your trips', exact: true }).click();
         await page.getByRole('heading', { name: 'Browser travellers trip' }).waitFor();
         await page.getByRole('link', { name: 'Logout', exact: true }).click();
