@@ -255,7 +255,7 @@ test('account, profile, trip and photo flows enforce ownership against a real di
         await page.getByRole('link', { name: 'My trips', exact: true }).click();
         await page.getByRole('heading', { name: 'Browser travellers trip' }).waitFor();
         await page.getByRole('link', { name: 'Logout', exact: true }).click();
-        await page.getByRole('link', { name: 'Login', exact: true }).waitFor();
+        await page.locator('header').getByRole('link', { name: 'Login', exact: true }).waitFor();
 
         await signup('Dan', 'dan-browser@example.com');
         await createProfile();
