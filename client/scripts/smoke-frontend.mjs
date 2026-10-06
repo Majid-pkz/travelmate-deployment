@@ -53,7 +53,7 @@ async function waitForFrontend(child) {
 }
 
 async function checkFrontend(browser, mode) {
-  const child = spawn(process.execPath, [viteEntry, ...(mode === 'preview' ? ['preview'] : [])], {
+  const child = spawn(process.execPath, [viteEntry, ...(mode === 'preview' ? ['preview'] : []), '--host', '127.0.0.1'], {
     cwd: clientRoot,
     stdio: 'inherit',
   });

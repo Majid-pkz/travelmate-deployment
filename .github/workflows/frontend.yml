@@ -16,8 +16,6 @@ jobs:
           node-version: '24'
       - name: Match the Windows npm version
         run: npm install --global npm@10.1.0
-      - name: Generate the replacement lockfile
-        run: npm install --prefix client --package-lock-only
       - name: Install the committed frontend dependencies
         run: npm ci --prefix client
       - name: Lint and build the frontend
@@ -30,13 +28,3 @@ jobs:
         run: npm exec --prefix client -- playwright install --with-deps --only-shell chromium
       - name: Check browser pages and API forwarding
         run: npm run test:smoke --prefix client
-      - name: Export generated lockfile for the verified commit
-        if: always()
-        run: |
-          node --input-type=module <<'NODE'
-          import { readFileSync } from 'node:fs';
-          const encoded = readFileSync('client/package-lock.json').toString('base64');
-          for (let i = 0; i < encoded.length; i += 2000) {
-            console.log('LOCK_B64:' + (i / 2000) + ':' + encoded.slice(i, i + 2000));
-          }
-          NODE
