@@ -1,4 +1,5 @@
 import { useEffect, useId, useState } from 'react';
+import { apiUrl } from '../utils/api.mjs';
 import Autocomplete from '@mui/material/Autocomplete';
 import TextField from '@mui/material/TextField';
 import './CityInput.css';
@@ -20,7 +21,7 @@ export default function CityInput({ value = '', onChange, onBlur, label, error, 
     const timer = setTimeout(async () => {
       setStatus('Finding cities…');
       try {
-        const response = await fetch('/api/locations?q=' + encodeURIComponent(current), { signal: controller.signal });
+        const response = await fetch(apiUrl('/api/locations?q=' + encodeURIComponent(current)), { signal: controller.signal });
         if (!response.ok) throw new Error('Location lookup unavailable');
         const data = await response.json();
         if (controller.signal.aborted) return;

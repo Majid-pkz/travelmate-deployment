@@ -11,6 +11,7 @@ const { authMiddleware } = require('./utils/auth');
 const { typeDefs, resolvers } = require('./schemas');
 const imageRoutes = require('./schemas/image-routes');
 const { createLocationsRouter } = require('./routes/locations');
+const { readHttpConfig, frontendCors } = require('./config/http');
 
 function limitFields(context) {
   let fields = 0;
@@ -23,12 +24,15 @@ function limitFields(context) {
 }
 
 async function createApp() {
+  const config = readHttpConfig();
   const app = express();
+  app.set('trust proxy', config.trustProxyHops);
   app.disable('x-powered-by');
   app.use((req, res, next) => {
     res.set('X-Content-Type-Options', 'nosniff');
     next();
   });
+  app.use(['/graphql', '/api'], frontendCors(config.origins));
   const httpServer = http.createServer(app);
   const server = new ApolloServer({
     typeDefs, resolvers,
@@ -69,7 +73,7 @@ async function createApp() {
   // Keep the original checked-in image URLs usable; new photos live in MongoDB.
   app.use('/images', express.static(path.join(__dirname, 'images')));
   app.use('/api', (req, res) => res.status(404).json({ error: 'Endpoint not found.' }));
-  if (process.env.NODE_ENV === 'production') {
+  if (process.env.NODE_ENV === 'production' && config.serveClient) {
     app.use(express.static(path.join(__dirname, '../client/build')));
     app.get(/^\/(?!graphql(?:\/|$)|images(?:\/|$)|assets(?:\/|$)).*/, (req, res) => {
       res.sendFile(path.join(__dirname, '../client/build/index.html'));

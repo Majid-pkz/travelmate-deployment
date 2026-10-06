@@ -6,7 +6,7 @@ async function start() {
   const db = require('./config/connection');
   await db.ready;
   const port = Number(process.env.PORT) || 3001;
-  httpServer.listen(port);
+  httpServer.listen(port, '0.0.0.0');
   await once(httpServer, 'listening');
   console.log('API server running on port ' + port + '!');
   console.log('Use GraphQL at http://localhost:' + port + '/graphql');

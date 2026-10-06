@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import axios from 'axios';
 import Auth from '../utils/auth';
+import { apiUrl } from '../utils/api.mjs';
 import TripPhotoPicker from './TripPhotoPicker';
 import { photoValidationError } from '../utils/tripPhotos';
 import './Forms.css';
@@ -19,7 +20,7 @@ export default function Upload({ getUserDetails, onSaved, onCancel }) {
     const body = new FormData();
     body.append('image', file);
     try {
-      await axios.post('/api/images', body, { headers: { authorization: 'Bearer ' + Auth.getToken() } });
+      await axios.post(apiUrl('/api/images'), body, { headers: { authorization: 'Bearer ' + Auth.getToken() } });
       await getUserDetails?.();
       setFile(null);
       setMessage('Profile photo updated.');

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useMutation } from '@apollo/client';
 import { JOIN_TRIP } from '../utils/mutations';
 import Auth from '../utils/auth';
+import { apiUrl } from '../utils/api.mjs';
 import { defaultTripPhoto, showDefaultTripPhoto } from '../utils/tripPhotos';
 import TripPhotoUpload from './TripPhotoUpload';
 import './TripCard.css';
@@ -24,7 +25,7 @@ function Organizer({ creator, image }) {
     <div className="trip-card__organizer">
       <span className="trip-card__avatar">
         {image && failedImage !== image
-          ? <img src={image} alt={`${name}'s profile`} onError={() => setFailedImage(image)} />
+          ? <img src={apiUrl(image)} alt={`${name}'s profile`} onError={() => setFailedImage(image)} />
           : <span aria-hidden="true">{initials}</span>}
       </span>
       <div><span className="trip-card__label">Organized by</span><span className="trip-card__name">{name}</span></div>
@@ -60,7 +61,7 @@ export default function TripCard({ trip, view = 'browse', onPhotoUploaded }) {
   return (
     <article className={`trip-card trip-card--${state}`} aria-labelledby={titleId}>
       <div className="trip-card__cover">
-        <img className="trip-card__photo" src={trip.image || defaultTripPhoto} alt={trip.title}
+        <img className="trip-card__photo" src={apiUrl(trip.image) || defaultTripPhoto} alt={trip.title}
           onError={showDefaultTripPhoto} />
         <span className={`trip-card__badge trip-card__badge--${state}`}>
           {organizing ? 'Organizing' : joined ? 'Joined' : 'Open trip'}

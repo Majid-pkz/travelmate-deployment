@@ -5,6 +5,7 @@ import Select from 'react-select';
 import { QUERY_PROFILE, QUERY_INTEREST } from '../utils/queries';
 import { UPDATE_PROFILE, UPDATE_USER } from '../utils/mutations';
 import Auth from '../utils/auth';
+import { apiUrl } from '../utils/api.mjs';
 import Upload from '../components/Upload';
 import CityInput from '../components/CityInput';
 import ChangePassword from '../components/ChangePassword';
@@ -87,7 +88,7 @@ export default function PersonalProfile() {
         <aside className="profile-identity">
           <div className="profile-avatar">
             {profile.image && failedImage !== profile.image
-              ? <img src={profile.image} alt="Avatar" onError={() => setFailedImage(profile.image)} />
+              ? <img src={apiUrl(profile.image)} alt="Avatar" onError={() => setFailedImage(profile.image)} />
               : <span aria-label="Profile initials">{initials || 'T'}</span>}
           </div>
           <h2>{fullName}</h2>

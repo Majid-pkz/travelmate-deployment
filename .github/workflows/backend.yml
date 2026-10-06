@@ -7,6 +7,9 @@ permissions:
   contents: read
 jobs:
   backend:
+    strategy:
+      matrix:
+        hosting: [same-origin, separate-origins]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     services:
@@ -21,6 +24,10 @@ jobs:
           --health-retries 10
     env:
       MONGODB_TEST_URI: mongodb://127.0.0.1:27017/travelmate_test_ci
+      VITE_API_URL: ${{ matrix.hosting == 'separate-origins' && 'http://127.0.0.1:3001' || '' }}
+      ALLOWED_ORIGINS: ${{ matrix.hosting == 'separate-origins' && 'http://127.0.0.1:3000' || '' }}
+      SERVE_CLIENT: ${{ matrix.hosting == 'separate-origins' && 'false' || 'true' }}
+      RUN_SPLIT_BROWSER_TESTS: ${{ matrix.hosting == 'separate-origins' && 'true' || 'false' }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38

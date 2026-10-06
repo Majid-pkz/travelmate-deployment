@@ -26,6 +26,7 @@
     "lint": "oxlint --max-warnings 0 src vite.config.mjs scripts",
     "build": "npm run lint && vite build",
     "preview": "vite preview",
+    "test:config": "node --test scripts/api.test.mjs",
     "test:smoke": "node scripts/smoke-frontend.mjs"
   },
   "devDependencies": {

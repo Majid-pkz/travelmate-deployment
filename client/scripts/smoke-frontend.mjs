@@ -11,6 +11,8 @@ const clientRoot = fileURLToPath(new URL('../', import.meta.url));
 const viteEntry = fileURLToPath(new URL('../node_modules/vite/bin/vite.js', import.meta.url));
 const currentUser = '0123456789abcdef01234567';
 let smokeJoined = false;
+let healthAvailable = true;
+const apiBase = 'http://127.0.0.1:3001';
 const longDescription = 'Meet in Sydney for a relaxed weekend in the Blue Mountains. We will walk the forest trails, share lunch, and stop at scenic lookouts. Bring comfortable shoes, water, and your favourite snacks.';
 function stateTrips() {
   const baseTrip = {
@@ -30,6 +32,13 @@ function stateTrips() {
   ];
 }
 const api = createServer(async (request, response) => {
+  if (request.headers.origin === base) response.setHeader('Access-Control-Allow-Origin', base);
+  if (request.method === 'OPTIONS') {
+    response.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    response.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type');
+    response.writeHead(204).end();
+    return;
+  }
   let body = '';
   for await (const chunk of request) body += chunk;
   if (request.url === '/api/images/profile/smoke') {
@@ -39,7 +48,10 @@ const api = createServer(async (request, response) => {
   }
   if (request.url === '/api/images/profile/missing') { response.writeHead(404).end(); return; }
   response.setHeader('Content-Type', 'application/json');
-  if (request.url === '/graphql' && body.includes('joinTrip')) {
+  if (request.url === '/api/health' && !request.headers.authorization) {
+    response.statusCode = healthAvailable ? 200 : 503;
+    response.end(JSON.stringify({ status: healthAvailable ? 'ok' : 'unavailable' }));
+  } else if (request.url === '/graphql' && body.includes('joinTrip')) {
     smokeJoined = true;
     response.end(JSON.stringify({ data: { joinTrip: stateTrips()[2] } }));
   } else if (request.url.startsWith('/api/locations')) {
@@ -90,7 +102,7 @@ async function waitForFrontend(child) {
 }
 
 async function checkFrontend(browser, mode) {
-  const child = spawn(process.execPath, [viteEntry, ...(mode === 'preview' ? ['preview'] : []), '--host', '127.0.0.1'], {
+  const child = spawn(process.execPath, [viteEntry, ...(mode !== 'development' ? ['preview'] : []), '--host', '127.0.0.1'], {
     cwd: clientRoot,
     stdio: 'inherit',
   });
@@ -121,7 +133,7 @@ async function checkFrontend(browser, mode) {
     const page = await context.newPage();
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
-    await page.route('**/*', route => route.request().url().startsWith(base)
+    await page.route('**/*', route => [base, ...(mode === 'split' ? [apiBase] : [])].some(origin => route.request().url().startsWith(origin + '/'))
       ? route.continue() : route.abort());
 
     await page.goto(base, { waitUntil: 'domcontentloaded' });
@@ -229,6 +241,20 @@ async function checkFrontend(browser, mode) {
     await page.setViewportSize({ width: 1280, height: 800 });
     await page.reload();
     await open.getByText('Joined', { exact: true }).waitFor();
+    if (mode === 'split') {
+      assert.equal(new URL(await joined.locator('.trip-card__avatar img').getAttribute('src')).origin, apiBase);
+      healthAvailable = false;
+      await page.goto(base);
+      await page.getByText('Live features are starting.', { exact: false }).waitFor();
+      await page.getByRole('heading', { name: /Welcome to Travelmate/i }).waitFor();
+      await page.clock.install();
+      await page.clock.fastForward(95_000);
+      await page.getByRole('button', { name: 'Try again', exact: true }).waitFor();
+      healthAvailable = true;
+      await page.getByRole('button', { name: 'Try again', exact: true }).click();
+      await page.waitForFunction(() => !document.querySelector('.api-status'));
+      console.log('Separate frontend/API origins, saved photos, slow startup, bounded failure and manual retry passed');
+    }
     assert.deepEqual(errors, [], 'Pages should render without JavaScript errors');
     console.log(mode + ': page rendering, trip membership states, equal card heights, avatar fallbacks, global city selection, Enter search, provider fallback, keyboard details, mobile layout, private routes and proxies passed');
   } catch (failure) {
@@ -251,6 +277,10 @@ try {
   browser = await chromium.launch();
   await checkFrontend(browser, 'development');
   await checkFrontend(browser, 'preview');
+  const build = spawn(process.execPath, [viteEntry, 'build'], { cwd: clientRoot, env: { ...process.env, VITE_API_URL: apiBase }, stdio: 'inherit' });
+  const [code] = await once(build, 'exit');
+  assert.equal(code, 0, 'The separate-host build must succeed');
+  await checkFrontend(browser, 'split');
 } finally {
   if (browser) await browser.close();
   await new Promise(resolve => api.close(resolve));

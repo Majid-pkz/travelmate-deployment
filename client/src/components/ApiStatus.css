@@ -1,0 +1,3 @@
+.api-status { display: block; padding: .8rem 1.25rem; background: #eef5fb; color: #1c4363; text-align: center; font-size: .95rem; line-height: 1.5; }
+.api-status button { margin-left: .35rem; border: 1px solid #39688b; border-radius: .4rem; padding: .2rem .6rem; color: inherit; background: white; font: inherit; cursor: pointer; }
+.api-status button:focus-visible { outline: 2px solid #1c4363; outline-offset: 3px; }

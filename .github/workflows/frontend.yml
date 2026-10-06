@@ -23,7 +23,9 @@ jobs:
       - name: Audit all frontend dependencies
         run: npm audit --prefix client --audit-level=low
       - name: Check private runtime configuration
-        run: npm run test:config
+        run: |
+          npm run test:config
+          npm run test:config --prefix client
       - name: Install the smoke-test browser
         run: npm exec --prefix client -- playwright install --with-deps --only-shell chromium
       - name: Check browser pages and API forwarding

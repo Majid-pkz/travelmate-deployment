@@ -3,6 +3,8 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { ApolloClient, ApolloProvider, InMemoryCache, createHttpLink, } from '@apollo/client';
 import { setContext } from '@apollo/client/link/context';
 import Auth from './utils/auth';
+import { apiUrl } from './utils/api.mjs';
+import ApiStatus from './components/ApiStatus';
 
 
 import Home from './pages/Home/Home';
@@ -26,7 +28,7 @@ function PrivatePage({ children }) {
 
 // Construct our main GraphQL API endpoint
 const httpLink = createHttpLink({
-  uri: '/graphql',
+  uri: apiUrl('/graphql'),
 });
 
 // Construct request middleware that will attach the JWT token to every request as an `authorization` header
@@ -53,6 +55,7 @@ function App() {
     <ApolloProvider client={client}>
       <Router>
         <Header />
+        <ApiStatus />
         <Suspense fallback={<output className="d-block text-center py-4">Loading page...</output>}>
         <Routes>
           <Route

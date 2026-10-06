@@ -1,5 +1,6 @@
 import axios from 'axios';
 import Auth from './auth';
+import { apiUrl } from './api.mjs';
 import oceanView from '../assets/oceanView.jpg';
 
 export const defaultTripPhoto = oceanView;
@@ -16,7 +17,7 @@ export async function uploadTripPhoto(tripId, file) {
   if (!file || error) throw new Error(error || 'Choose an image to upload.');
   const form = new FormData();
   form.append('image', file);
-  const { data } = await axios.post('/api/images/trips/' + tripId, form, {
+  const { data } = await axios.post(apiUrl('/api/images/trips/' + tripId), form, {
     headers: { Authorization: 'Bearer ' + Auth.getToken() },
   });
   return data;

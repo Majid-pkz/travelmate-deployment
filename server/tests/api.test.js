@@ -21,10 +21,24 @@ test('account, profile, trip and photo flows enforce ownership against a real di
   await Promise.all([User.init(), Profile.init()]);
   await Promise.all([User.deleteMany({}), Profile.deleteMany({}), Trip.deleteMany({}), Interest.deleteMany({})]);
   let { server, httpServer } = await createApp();
-  httpServer.listen(0, '127.0.0.1');
+  const split = process.env.RUN_SPLIT_BROWSER_TESTS === 'true';
+  httpServer.listen(split ? 3001 : 0, '127.0.0.1');
   await once(httpServer, 'listening');
   const base = 'http://127.0.0.1:' + httpServer.address().port;
+  let staticServer;
+  const uiBase = split ? 'http://127.0.0.1:3000' : base;
+  if (split) {
+    const express = require('express');
+    const path = require('node:path');
+    const staticApp = express();
+    staticApp.use(express.static(path.join(__dirname, '../../client/build')));
+    staticApp.get('*', (req, res) => res.sendFile(path.join(__dirname, '../../client/build/index.html')));
+    staticServer = staticApp.listen(3000, '127.0.0.1');
+    await once(staticServer, 'listening');
+    assert.equal((await fetch(base + '/login')).status, 404, 'API-only hosting must not serve the frontend');
+  }
   t.after(async () => {
+    if (staticServer) await new Promise(resolve => staticServer.close(resolve));
     await server.stop();
     await mongoose.connection.dropDatabase();
     await mongoose.disconnect();
@@ -325,19 +339,19 @@ test('account, profile, trip and photo flows enforce ownership against a real di
         const page = await context.newPage();
         const errors = [];
         page.on('pageerror', error => { errors.push(error.message); console.error('Browser error:', error.message); });
-        await page.route('**/*', route => route.request().url().startsWith(base) ? route.continue() : route.abort());
-        await page.route(base + '/api/locations?*', route => route.fulfill({ contentType: 'application/json', body: JSON.stringify({ locations: [
+        await page.route('**/*', route => [base, uiBase].some(origin => route.request().url().startsWith(origin + '/')) ? route.continue() : route.abort());
+        await page.route(base + '/api/locations?*', route => route.fulfill({ headers: { 'Access-Control-Allow-Origin': uiBase }, contentType: 'application/json', body: JSON.stringify({ locations: [
           { id: '2147714', name: 'Sydney', region: 'New South Wales', country: 'Australia' },
           { id: '1850147', name: 'Tokyo', region: 'Tokyo', country: 'Japan' },
         ] }) }));
         async function signup(first, email) {
-          await page.goto(base + '/signup');
+          await page.goto(uiBase + '/signup');
           await page.getByLabel('First name').fill(first);
           await page.getByLabel('Last name').fill('Browser Tester');
           await page.getByLabel('Email address').fill(email);
           await page.getByLabel('Password', { exact: true }).fill(rawPassword);
           await page.getByLabel('Password', { exact: true }).press('Enter');
-          await page.waitForURL(base + '/');
+          await page.waitForURL(uiBase + '/');
           await page.getByRole('combobox', { name: 'Departure location' }).waitFor();
         }
         async function createProfile() {
@@ -356,7 +370,7 @@ test('account, profile, trip and photo flows enforce ownership against a real di
           await page.getByRole('combobox').last().fill('Hiking');
           await page.getByRole('combobox').last().press('Enter');
           await page.getByPlaceholder('Age', { exact: true }).press('Enter');
-          await page.waitForURL(base + '/my-profile');
+          await page.waitForURL(uiBase + '/my-profile');
           await page.getByRole('heading', { name: 'Traveller information' }).waitFor();
           await page.getByText('Hiking', { exact: true }).waitFor();
         }
@@ -394,7 +408,7 @@ test('account, profile, trip and photo flows enforce ownership against a real di
         await page.route(base + '/graphql', route => {
           if (!failedProfileSave && /mutation\s+updateProfile/.test(route.request().postDataJSON()?.query ?? '')) {
             failedProfileSave = true;
-            return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ errors: [{ message: 'Temporary profile test failure.' }] }) });
+            return route.fulfill({ headers: { 'Access-Control-Allow-Origin': uiBase }, contentType: 'application/json', body: JSON.stringify({ errors: [{ message: 'Temporary profile test failure.' }] }) });
           }
           return route.continue();
         });
@@ -449,7 +463,7 @@ test('account, profile, trip and photo flows enforce ownership against a real di
         let photoAttempts = 0;
         await page.route(base + '/api/images/trips/*', route => {
           if (route.request().method() === 'POST' && ++photoAttempts === 1) {
-            return route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: 'Temporary test upload failure.' }) });
+            return route.fulfill({ status: 503, headers: { 'Access-Control-Allow-Origin': uiBase }, contentType: 'application/json', body: JSON.stringify({ error: 'Temporary test upload failure.' }) });
           }
           return route.continue();
         });
@@ -468,7 +482,8 @@ test('account, profile, trip and photo flows enforce ownership against a real di
         await page.getByRole('heading', { name: 'Browser travellers trip' }).waitFor();
         await page.waitForFunction(() => document.querySelector('img[alt="Browser travellers trip"]')?.naturalWidth > 0);
         const firstTripImage = await page.getByRole('img', { name: 'Browser travellers trip', exact: true }).getAttribute('src');
-        assert.match(firstTripImage, /^\/api\/images\/trips\//);
+        assert.match(new URL(firstTripImage, uiBase).pathname, /^\/api\/images\/trips\//);
+        if (split) assert.equal(new URL(firstTripImage).origin, base);
         await page.getByRole('button', { name: 'Change trip photo', exact: true }).click();
         const blue = await sharp({ create: { width: 32, height: 32, channels: 3, background: '#2299cc' } }).png().toBuffer();
         await page.getByLabel('Trip photo', { exact: true }).setInputFiles({ name: 'replacement.png', mimeType: 'image/png', buffer: blue });
@@ -495,7 +510,7 @@ test('account, profile, trip and photo flows enforce ownership against a real di
         await fillTrip('Dan organizes a trip', 'Browser departure');
         await page.getByPlaceholder('Title', { exact: true }).press('Enter');
         await page.getByRole('heading', { name: 'Trip created', exact: true }).waitFor();
-        await page.goto(base + '/');
+        await page.goto(uiBase + '/');
         await page.getByRole('combobox', { name: 'Departure location' }).fill('Browser departure');
         await page.getByRole('combobox', { name: 'Departure location', exact: true }).press('Enter');
         await page.getByRole('img', { name: 'Browser travellers trip', exact: true }).waitFor();
@@ -529,11 +544,11 @@ test('account, profile, trip and photo flows enforce ownership against a real di
         assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), 'My trips must fit a mobile screen');
         await page.setViewportSize({ width: 1280, height: 800 });
         await page.getByRole('link', { name: 'Logout', exact: true }).click();
-        await page.goto(base + '/login');
+        await page.goto(uiBase + '/login');
         await page.getByLabel('Email address').fill('carol-updated@example.com');
         await page.getByLabel('Password', { exact: true }).fill(rawPassword);
         await page.getByLabel('Password', { exact: true }).press('Enter');
-        await page.waitForURL(base + '/');
+        await page.waitForURL(uiBase + '/');
         await page.getByRole('link', { name: 'Profile', exact: true }).click();
         await page.getByText('Updated browser biography', { exact: true }).waitFor();
         await page.getByRole('button', { name: 'Change password', exact: true }).click();
@@ -549,18 +564,18 @@ test('account, profile, trip and photo flows enforce ownership against a real di
         await page.getByText('Your current password is incorrect.', { exact: true }).waitFor();
         await page.getByLabel('Current password', { exact: true }).fill(rawPassword);
         await page.getByLabel('Confirm new password', { exact: true }).press('Enter');
-        await page.waitForURL(base + '/login');
+        await page.waitForURL(uiBase + '/login');
         await page.getByText('Password changed. Log in with your new password.', { exact: true }).waitFor();
         assert.equal(await page.evaluate(() => localStorage.getItem('id_token')), null);
         await page.getByLabel('Email address').fill('carol-updated@example.com');
         await page.getByLabel('Password', { exact: true }).fill(updatedPassword);
         await page.getByLabel('Password', { exact: true }).press('Enter');
-        await page.waitForURL(base + '/');
+        await page.waitForURL(uiBase + '/');
         await page.getByRole('link', { name: 'My trips', exact: true }).click();
         await page.getByRole('heading', { name: 'Browser travellers trip' }).waitFor();
         assert.equal(await page.getByRole('img', { name: 'Browser travellers trip', exact: true }).getAttribute('src'), updatedTripImage);
         assert.deepEqual(errors, [], 'Real account/trip pages should render without JavaScript errors');
-        console.log('Production browser profile account editing, email persistence, password confirmation and re-login, photo controls, validation and keyboard submission passed');
+        console.log((split ? 'Separate-origin ' : 'Same-origin ') + 'production browser profile account editing, email persistence, password confirmation and re-login, photo controls, validation and keyboard submission passed');
       } catch (failure) {
         const page = browser.contexts()[0]?.pages()[0];
         if (page) console.log('Browser failure context:', JSON.stringify({ url: page.url(), text: await page.locator('main').innerText(),

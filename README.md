@@ -106,9 +106,10 @@ npm run preview --prefix client
 ```
 
 The local preview uses port 3000 and the same API and image proxies. A deployed
-frontend needs those requests served or forwarded to the deployed backend;
-Vite's local proxy is not part of the static build. Public hosting setup is still
-pending.
+frontend uses `VITE_API_URL` for a separate backend, or keeps same-origin URLs
+when Express serves the build. Vite's local proxy is not part of the static build.
+The [Render Free deployment guide](docs/render-free.md) covers a static frontend,
+a free API service and the existing Atlas database. Public deployment is pending.
 
 GitHub Actions checks installation, lint, build, frontend dependency audit, root
 configuration tests, and development/preview request forwarding. The frontend
