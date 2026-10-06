@@ -1,78 +1,40 @@
-// import React, { useState } from 'react';
-
-// const Upload = () => {
-//   const [selectedFile, setSelectedFile] = useState(null);
-
-//   const handleFileChange = (event) => {
-//     setSelectedFile(event.target.files[0]);
-//   };
-
-//   const handleUpload = () => {
-//     // Perform upload logic here, such as sending the file to a server
-//  console.log(selectedFile)
-//     // Reset selected file state
-//     setSelectedFile(null);
-//   };
-
-//   return (
-//     <div>
-//       <input type="file" onChange={handleFileChange} />
-//       <button onClick={handleUpload} disabled={!selectedFile}>
-//         Upload
-//       </button>
-//     </div>
-//   );
-// };
-
-// export default Upload;
-
 import React, { useState } from 'react';
 import axios from 'axios';
+import Auth from '../utils/auth';
 
-const Upload = ({getUserDetails}) => {
+const Upload = ({ getUserDetails }) => {
   const [selectedFile, setSelectedFile] = useState(null);
-
-  const handleFileChange = (event) => {
-    setSelectedFile(event.target.files[0]);
-  };
-
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState('');
   const handleSubmit = async (event) => {
     event.preventDefault();
-
-    if (selectedFile) {
-      const formData = new FormData();
-      formData.append('image', selectedFile);
-      const token = localStorage.getItem('id_token');
-
-      try {
-        await axios.post('/api/images', formData, {
-          headers: {
-            'Content-Type': 'multipart/form-data',
-            authorization: token ? `Bearer ${token}` : '',
-          }
-        });
-        
-        getUserDetails()
-        console.log('Image uploaded successfully',selectedFile);
-      } 
-      
-      catch (error) {
-        console.error('Error uploading image:', error);
-      }
-    }
+    if (!selectedFile || busy) return;
+    if (!Auth.loggedIn()) { setMessage('Log in again before uploading.'); return; }
+    if (selectedFile.size > 2 * 1024 * 1024) { setMessage('Choose an image smaller than 2 MB.'); return; }
+    setBusy(true);
+    setMessage('');
+    const formData = new FormData();
+    formData.append('image', selectedFile);
+    try {
+      await axios.post('/api/images', formData, {
+        headers: { authorization: 'Bearer ' + Auth.getToken() },
+      });
+      await getUserDetails();
+      setMessage('Profile photo updated.');
+    } catch (error) {
+      setMessage(error.response?.data?.error || 'Upload failed. Please try again.');
+    } finally { setBusy(false); }
   };
-
   return (
-    <div>
-      <h4 style={{fontSize: '17px'}}>Image Upload</h4>
-      <form onSubmit={handleSubmit}>
-        <div>
-        <input type="file" onChange={handleFileChange} />
-        </div>
-        <button className="btn btn-primary" type="submit">Upload</button>
-      </form>
-    </div>
+    <form onSubmit={handleSubmit}>
+      <label htmlFor="profile-photo">Profile photo (PNG or JPEG, up to 2 MB)</label>
+      <input id="profile-photo" type="file" accept="image/png,image/jpeg"
+        onChange={(event) => { setSelectedFile(event.target.files[0]); setMessage(''); }} />
+      <button className="btn btn-primary" type="submit" disabled={!selectedFile || busy}>
+        {busy ? 'Uploading...' : 'Upload'}
+      </button>
+      {message && <output className="d-block">{message}</output>}
+    </form>
   );
 };
-
 export default Upload;

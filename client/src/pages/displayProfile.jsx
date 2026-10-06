@@ -6,12 +6,13 @@ import Upload from '../components/Upload';
 import Select from 'react-select';
 import './Style/displayProfile.css'
 import Auth from '../utils/auth';
+import { Navigate } from 'react-router-dom';
 
 const PersonalProfile = () => {
-  const token = localStorage.getItem('id_token');
-  const userData = Auth.getProfile(token);
+  const userId = Auth.getProfile()?.data?._id;
   const { loading, error, data, refetch } = useQuery(QUERY_PROFILE, {
-    variables: { profileUser: userData.data._id },
+    variables: { profileUser: userId },
+    skip: !userId,
   });
   const { loading: interestLoading, data: interestData } = useQuery(QUERY_INTEREST);
   const [updateProfile] = useMutation(UPDATE_PROFILE);
@@ -23,18 +24,18 @@ const PersonalProfile = () => {
   const [isEditing, setIsEditing] = useState(false);
 
   useEffect(() => {
-    if (data) {
+    if (data?.profile) {
       setProfileUser(data.profile.profileUser);
-      setAge(data.profile.age);
-      setGender(data.profile.gender);
-      setBio(data.profile.bio);
+      setAge(data.profile.age ?? '');
+      setGender(data.profile.gender ?? '');
+      setBio(data.profile.bio ?? '');
 
       // Filter out null values from the interests array
       const filteredInterests = data.profile.interests
         .filter((interest) => interest !== null)
         .map((interest) => ({
           value: interest._id,
-          label: interest.label,
+          label: Array.isArray(interest.label) ? interest.label.join(', ') : interest.label,
         }));
       setSelectedInterests(filteredInterests);
     }
@@ -50,7 +51,7 @@ const PersonalProfile = () => {
 
       await updateProfile({
         variables: {
-          id: userData.data._id,
+          id: userId,
           age: age !== '' ? parseInt(age, 10) : null,
           gender,
           bio,
@@ -67,6 +68,7 @@ const PersonalProfile = () => {
 
 
 
+  if (!userId) return <Navigate to="/login" replace />;
   if (loading || interestLoading) {
     return <div>Loading...</div>;
   }
@@ -75,11 +77,12 @@ const PersonalProfile = () => {
     return <div>Error: {error.message}</div>;
   }
 
+  if (!data?.profile) return <Navigate to="/create-profile" replace />;
   const { image, createdTrips } = data.profile;
 
   const interestOptions = interestData?.interests.map((interest) => ({
     value: interest._id,
-    label: interest.label,
+    label: Array.isArray(interest.label) ? interest.label.join(', ') : interest.label,
   }));
 
   const handleInterestsChange = (selectedOptions) => {
@@ -129,9 +132,9 @@ const PersonalProfile = () => {
                     {isEditing ? (
                       <select value={gender} onChange={(e) => setGender(e.target.value)} className="form-select">
                         <option value="">Select Gender</option>
-                        <option value="Male">Male</option>
-                        <option value="Female">Female</option>
-                        <option value="Other">Other</option>
+                        <option value="male">Male</option>
+                        <option value="female">Female</option>
+                        <option value="other">Other</option>
                       </select>
                     ) : (
                       <p className="text-muted">{gender}</p>
@@ -202,8 +205,6 @@ const PersonalProfile = () => {
 };
 
 export default PersonalProfile;
-
-
 
 
 

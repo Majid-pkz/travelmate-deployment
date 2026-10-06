@@ -3,12 +3,13 @@ import { useQuery } from '@apollo/client';
 import oceanView from '../assets/oceanView.jpg';
 import { QUERY_MY_TRIPS } from '../utils/queries';
 import Auth from '../utils/auth';
+import { Navigate } from 'react-router-dom';
 
 const MyUpcomingTrips = () => {
-  const token = localStorage.getItem('id_token');
-  const userData = Auth.getProfile(token);
+  const userId = Auth.getProfile()?.data?._id;
   const { loading, error, data} = useQuery(QUERY_MY_TRIPS, {
-    variables: { travelmates: userData.data._id },
+    variables: { travelmates: userId },
+    skip: !userId,
   });
 //   console.log(data.myTrips)
 const formatDate = (dateString) => {
@@ -19,6 +20,7 @@ const formatDate = (dateString) => {
     return `${day}/${month}/${year}`;
   };
 
+  if (!userId) return <Navigate to="/login" replace />;
   if (loading) {
     return <div>Loading...</div>;
   }
@@ -61,7 +63,7 @@ const formatDate = (dateString) => {
             <h3>Travelmates:</h3>
             {trip.travelmates.map((travelmate) => (
               <div key={travelmate._id}>
-                <p style={{ color: '#333333' }}>{travelmate.firstname} - <a href={`mailto:${travelmate.email}`}>{travelmate.email}</a></p>
+                <p style={{ color: '#333333' }}>{travelmate.firstname}{travelmate.email && <> - <a href={'mailto:' + travelmate.email}>{travelmate.email}</a></>}</p>
               </div>
             ))}
           </div>

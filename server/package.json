@@ -6,25 +6,26 @@
   "scripts": {
     "start": "node server.js",
     "seed": "node data/seed.js",
-    "watch": "nodemon server.js"
+    "watch": "node --watch server.js",
+    "test": "node --test tests/auth.test.js",
+    "test:integration": "node --test tests/api.test.js"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "apollo-server-express": "^3.6.2",
-    "bcrypt": "^5.1.0",
-    "express": "^4.17.2",
-    "graphql": "^16.3.0",
-    "jsonwebtoken": "^8.5.1",
-    "mongoose": "^7.0.2",
-    "multer": "^1.4.5-lts.1"
-  },
-  "devDependencies": {
-    "nodemon": "^2.0.22"
+    "@apollo/server": "^5.5.1",
+    "@as-integrations/express4": "^1.1.2",
+    "bcrypt": "^6.0.0",
+    "express": "^4.22.3",
+    "express-rate-limit": "^8.2.1",
+    "graphql": "^16.13.1",
+    "jsonwebtoken": "^9.0.3",
+    "mongoose": "^8.24.5",
+    "multer": "^2.4.0",
+    "sharp": "^0.35.5"
   },
   "engines": {
     "node": "24.x"
   }
 }
-

@@ -91,6 +91,10 @@ const Signup = () => {
                   className="form-control"
                   id="password"
                   type="password"
+                  minLength={8}
+                  maxLength={72}
+                  autoComplete="new-password"
+                  required
                   name="password"
                   value={formState.password}
                   onChange={handleChange}

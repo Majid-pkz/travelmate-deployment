@@ -18,13 +18,12 @@ const Profile = () => {
   const { data: interestData } = useQuery(QUERY_INTEREST);
   const interestOptions = interestData?.interests.map((interest) => ({
     value: interest._id,
-    label: interest.label,
+    label: Array.isArray(interest.label) ? interest.label.join(', ') : interest.label,
   }));
   
-  const token = localStorage.getItem('id_token');
-  const userData = Auth.getProfile(token);
+  const userId = Auth.getProfile()?.data?._id;
   const [formState, setFormState] = useState({
-    profileUser: userData.data._id,
+    profileUser: userId || '',
     location: null,
     gender: null,
     age: null,
@@ -34,12 +33,12 @@ const Profile = () => {
   const [createProfile, { error, data }] = useMutation(CREATE_PROFILE);
 
   const { data: profileExistsData } = useQuery(PROFILE_EXISTS, {
-    variables: { profileUser: userData.data._id },
+    variables: { profileUser: userId },
+    skip: !userId,
   });
 
   useEffect(() => {
     if (profileExistsData && profileExistsData.profileExist) {
-      console.log('profile exists', profileExistsData);
       setRedirectToProfile(true);
     }
   }, [profileExistsData]);
@@ -74,6 +73,7 @@ const Profile = () => {
   };
   
 
+  if (!userId) return <Navigate to="/login" replace />;
   if (redirectToProfile) {
     
     return <Navigate to="/my-profile" replace />;

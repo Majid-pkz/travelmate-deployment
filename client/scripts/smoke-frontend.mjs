@@ -107,6 +107,23 @@ async function checkFrontend(browser, mode) {
       await page.locator('input[name="email"]').waitFor();
       assert.equal(await page.locator('input[name="email"]').isVisible(), true);
     }
+    for (const path of ['/new-trip', '/upload', '/create-profile', '/my-profile', '/my-upcoming-trips']) {
+      await page.goto(base + path, { waitUntil: 'domcontentloaded' });
+      await page.waitForURL(base + '/login');
+      await page.locator('input[name="email"]').waitFor();
+    }
+    const expiredToken = 'e30.' + Buffer.from(JSON.stringify({
+      data: { _id: '0123456789abcdef01234567' }, exp: 1,
+    })).toString('base64url') + '.invalid';
+    for (const token of ['malformed-token', expiredToken]) {
+      await page.evaluate(value => localStorage.setItem('id_token', value), token);
+      await page.goto(base + '/my-profile', { waitUntil: 'domcontentloaded' });
+      await page.waitForURL(base + '/login');
+      await page.locator('input[name="email"]').waitFor();
+      assert.equal(await page.evaluate(() => localStorage.getItem('id_token')), null);
+    }
+    await page.goto(base + '/missing-page', { waitUntil: 'domcontentloaded' });
+    await page.getByRole('heading', { name: 'No match for /missing-page' }).waitFor();
     await page.goto(base + '/trips?search=Sydney', { waitUntil: 'domcontentloaded' });
     await page.getByText(/Departure Location:.*Sydney/).waitFor();
     await page.getByRole('button', { name: 'Join Trip' }).click();
@@ -114,7 +131,7 @@ async function checkFrontend(browser, mode) {
     await page.goto(base + '/trips?search=NoMatches', { waitUntil: 'domcontentloaded' });
     await page.getByText('No trips found. Try Again!').waitFor();
     assert.deepEqual(errors, [], 'Pages should render without JavaScript errors');
-    console.log(mode + ': page rendering, keyboard controls, deep links and proxies passed');
+    console.log(mode + ': page rendering, keyboard controls, private routes, invalid sessions, deep links and proxies passed');
   } finally {
     if (context) await context.close();
     if (child.exitCode === null) {
