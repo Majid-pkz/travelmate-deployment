@@ -178,9 +178,16 @@ const resolvers = {
     updateUser: async (parent, params, context) => {
       const current = await access.self(context, params.id);
       const user = access.notFound(await User.findById(current._id).select('+password +tokenVersion'), 'Account');
+      const email = params.email === undefined ? user.email : access.email(params.email);
+      if (email !== user.email || params.password !== undefined) {
+        if (!await user.isCorrectPassword(params.currentPassword)) access.fail('Your current password is incorrect.');
+      }
+      if (email !== user.email && await User.exists({ email, _id: { $ne: user._id } })) {
+        access.fail('An account already uses that email address.');
+      }
       if (params.firstname !== undefined) user.firstname = access.text(params.firstname, 'first name', 50, true);
       if (params.lastname !== undefined) user.lastname = access.text(params.lastname, 'last name', 50, true);
-      if (params.email !== undefined) user.email = access.email(params.email);
+      user.email = email;
       if (params.password !== undefined) {
         user.password = access.password(params.password);
         user.tokenVersion += 1;

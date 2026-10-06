@@ -3,10 +3,11 @@ import { useQuery, useMutation } from '@apollo/client';
 import { Link, Navigate } from 'react-router-dom';
 import Select from 'react-select';
 import { QUERY_PROFILE, QUERY_INTEREST } from '../utils/queries';
-import { UPDATE_PROFILE } from '../utils/mutations';
+import { UPDATE_PROFILE, UPDATE_USER } from '../utils/mutations';
 import Auth from '../utils/auth';
 import Upload from '../components/Upload';
 import CityInput from '../components/CityInput';
+import ChangePassword from '../components/ChangePassword';
 import '../components/Forms.css';
 import './Style/displayProfile.css';
 
@@ -20,7 +21,9 @@ export default function PersonalProfile() {
     variables: { profileUser: userId }, skip: !userId, fetchPolicy: 'cache-and-network',
   });
   const { data: interestData } = useQuery(QUERY_INTEREST);
-  const [updateProfile, { loading: saving }] = useMutation(UPDATE_PROFILE);
+  const [updateProfile, { loading: savingProfile }] = useMutation(UPDATE_PROFILE);
+  const [updateUser, { loading: savingAccount }] = useMutation(UPDATE_USER);
+  const saving = savingProfile || savingAccount;
   const [draft, setDraft] = useState(null);
   const [photoOpen, setPhotoOpen] = useState(false);
   const [status, setStatus] = useState('');
@@ -41,7 +44,8 @@ export default function PersonalProfile() {
     setPhotoOpen(false);
     setStatus('');
     setSaveError('');
-    setDraft({ location: profile.location ?? '', age: profile.age ?? '', gender: profile.gender ?? '',
+    setDraft({ firstname: person.firstname, lastname: person.lastname, email: person.email ?? '', currentPassword: '',
+      location: profile.location ?? '', age: profile.age ?? '', gender: profile.gender ?? '',
       bio: profile.bio ?? '', interests });
   }
   function change(name, value) { setDraft(current => ({ ...current, [name]: value })); }
@@ -49,14 +53,31 @@ export default function PersonalProfile() {
     event.preventDefault();
     if (saving) return;
     setSaveError('');
+    if (!draft.firstname.trim() || !draft.lastname.trim()) {
+      setSaveError('Enter your first and last name.');
+      return;
+    }
+    let accountSaved = false;
+    let profileSaved = false;
     try {
+      if (draft.firstname.trim() !== person.firstname || draft.lastname.trim() !== person.lastname || draft.email.trim().toLowerCase() !== person.email) {
+        await updateUser({ variables: { id: userId, firstname: draft.firstname, lastname: draft.lastname,
+          email: draft.email, ...(draft.email.trim().toLowerCase() !== person.email ? { currentPassword: draft.currentPassword } : {}) } });
+        accountSaved = true;
+        setDraft(current => ({ ...current, currentPassword: '' }));
+      }
       await updateProfile({ variables: { id: userId, location: draft.location,
         age: draft.age === '' ? null : Number(draft.age), gender: draft.gender, bio: draft.bio,
         interests: draft.interests.map(interest => interest.value) } });
+      profileSaved = true;
       await refetch();
       setDraft(null);
       setStatus('Profile updated.');
-    } catch (failure) { setSaveError(failure.message || 'Could not save your profile. Please try again.'); }
+    } catch (failure) {
+      setSaveError(profileSaved ? 'Your changes were saved, but the profile could not refresh. Reload the page to see them.'
+        : accountSaved ? 'Your account details were saved, but traveller information could not be saved. Please retry.'
+          : failure.message || 'Could not save your profile. Please try again.');
+    }
   }
   return (
     <main className="account-page">
@@ -87,6 +108,17 @@ export default function PersonalProfile() {
           {draft ? <form onSubmit={save}>
             <fieldset disabled={saving}>
               <div className="form-fields">
+                <div className="form-field"><label htmlFor="profile-firstname">First name</label><input id="profile-firstname" name="firstname" type="text" required maxLength={50}
+                  value={draft.firstname} onChange={event => change('firstname', event.target.value)} /></div>
+                <div className="form-field"><label htmlFor="profile-lastname">Last name</label><input id="profile-lastname" name="lastname" type="text" required maxLength={50}
+                  value={draft.lastname} onChange={event => change('lastname', event.target.value)} /></div>
+                <div className="form-field form-field--wide"><label htmlFor="profile-email">Email address</label><input id="profile-email" name="email" type="email" required maxLength={254} autoComplete="email"
+                  aria-describedby="profile-email-help" value={draft.email} onChange={event => change('email', event.target.value)} />
+                  <span id="profile-email-help" className="form-helper">Use this email address to log in.</span></div>
+                {draft.email.trim().toLowerCase() !== person.email && <div className="form-field form-field--wide"><label htmlFor="profile-current-password">Current password</label>
+                  <input id="profile-current-password" name="currentPassword" type="password" required maxLength={72} autoComplete="current-password"
+                    aria-describedby="profile-password-help" value={draft.currentPassword} onChange={event => change('currentPassword', event.target.value)} />
+                  <span id="profile-password-help" className="form-helper">Confirm your current password to change your email address.</span></div>}
                 <div className="form-field form-field--wide"><CityInput label="Location" placeholder="Location" name="location"
                   value={draft.location} onChange={value => change('location', value)} maxLength={120} /></div>
                 <div className="form-field"><label htmlFor="profile-age">Age</label><input id="profile-age" name="age" type="number" min="0" max="120" step="1"
@@ -120,6 +152,7 @@ export default function PersonalProfile() {
         <Upload getUserDetails={refetch} onSaved={() => { setPhotoOpen(false); setStatus('Profile photo updated.'); photoButton.current?.focus(); }}
           onCancel={() => { setPhotoOpen(false); photoButton.current?.focus(); }} />
       </section>}
+      {!draft && !photoOpen && <ChangePassword />}
     </main>
   );
 }

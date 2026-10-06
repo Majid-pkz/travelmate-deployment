@@ -109,6 +109,32 @@ test('account, profile, trip and photo flows enforce ownership against a real di
     denied(await query('mutation($id:ID!){deleteProfile(id:$id){_id}}', { id: bobProfile._id }, alice.token), 'NOT_FOUND');
     assert.equal((await Profile.findById(bobProfile._id)).bio, 'Test traveller');
   });
+  await t.test('account editing persists names and password-confirmed email changes, rejects duplicates and preserves failed edits', async () => {
+    const eve = success(await query(registration, { first: 'Eve', email: 'eve@example.com', password: rawPassword })).createUser;
+    const edit = 'mutation($id:ID!,$first:String,$last:String,$email:String,$current:String){updateUser(id:$id,firstname:$first,lastname:$last,email:$email,currentPassword:$current){_id firstname lastname email}}';
+    denied(await query(edit, { id: eve.user._id, first: 'Changed' }), 'UNAUTHENTICATED');
+    denied(await query(edit, { id: eve.user._id, first: 'Changed' }, alice.token), 'FORBIDDEN');
+    denied(await query(edit, { id: eve.user._id, first: '   ' }, eve.token), 'BAD_USER_INPUT');
+    const renamed = success(await query(edit, { id: eve.user._id, first: ' Eva ', last: ' Traveller ' }, eve.token)).updateUser;
+    assert.equal(renamed.firstname, 'Eva');
+    assert.equal(renamed.lastname, 'Traveller');
+    denied(await query(edit, { id: eve.user._id, first: 'Should not save', email: 'new-eve@example.com' }, eve.token), 'BAD_USER_INPUT');
+    denied(await query(edit, { id: eve.user._id, email: 'new-eve@example.com', current: 'wrong' }, eve.token), 'BAD_USER_INPUT');
+    denied(await query(edit, { id: eve.user._id, first: 'Should not save', email: 'ALICE@example.com', current: rawPassword }, eve.token), 'BAD_USER_INPUT');
+    const unchanged = await User.findById(eve.user._id).select('+password +tokenVersion');
+    assert.equal(unchanged.firstname, 'Eva');
+    assert.equal(unchanged.email, 'eve@example.com');
+    assert.equal(unchanged.tokenVersion, 0);
+    assert.ok(await bcrypt.compare(rawPassword, unchanged.password));
+    const edited = success(await query(edit, { id: eve.user._id, email: ' NEW-EVE@example.com ', current: rawPassword }, eve.token)).updateUser;
+    assert.equal(edited.email, 'new-eve@example.com');
+    const login = 'mutation($email:String!,$password:String!){login(email:$email,password:$password){user{_id firstname lastname}}}';
+    denied(await query(login, { email: 'eve@example.com', password: rawPassword }), 'UNAUTHENTICATED');
+    const loggedIn = success(await query(login, { email: 'new-eve@example.com', password: rawPassword })).login.user;
+    assert.equal(loggedIn._id, eve.user._id);
+    assert.equal(loggedIn.firstname, 'Eva');
+    assert.equal(loggedIn.lastname, 'Traveller');
+  });
   await t.test('catalog mutations require a real administrator role', async () => {
     denied(await query('mutation{createInterests(label:"Bad"){_id}}', {}, alice.token), 'FORBIDDEN');
     denied(await query('mutation{createTripType(tripType:"Bad"){_id}}', {}, bob.token), 'FORBIDDEN');
@@ -243,7 +269,13 @@ test('account, profile, trip and photo flows enforce ownership against a real di
   });
   await t.test('password changes stay hashed and revoke the old token across GraphQL and uploads', async () => {
     const nextPassword = 'Updated private test password!';
-    success(await query('mutation($id:ID!,$password:String!){updateUser(id:$id,password:$password){_id}}', { id: alice.user._id, password: nextPassword }, alice.token));
+    const change = 'mutation($id:ID!,$password:String!,$current:String){updateUser(id:$id,password:$password,currentPassword:$current){_id}}';
+    denied(await query(change, { id: alice.user._id, password: nextPassword }, alice.token), 'BAD_USER_INPUT');
+    denied(await query(change, { id: alice.user._id, password: nextPassword, current: 'wrong' }, alice.token), 'BAD_USER_INPUT');
+    const before = await User.findById(alice.user._id).select('+password +tokenVersion');
+    assert.ok(await bcrypt.compare(rawPassword, before.password));
+    assert.equal(before.tokenVersion, 0);
+    success(await query(change, { id: alice.user._id, password: nextPassword, current: rawPassword }, alice.token));
     const stored = await User.findById(alice.user._id).select('+password +tokenVersion');
     assert.ok(await bcrypt.compare(nextPassword, stored.password));
     assert.equal(await bcrypt.compare(rawPassword, stored.password), false);
@@ -343,12 +375,44 @@ test('account, profile, trip and photo flows enforce ownership against a real di
         await page.getByRole('button', { name: 'Change profile photo', exact: true }).waitFor();
         assert.equal(await page.locator('input[type="file"]').count(), 0, 'Revisiting a profile keeps the upload controls hidden');
         await page.getByRole('button', { name: 'Edit profile', exact: true }).click();
+        assert.equal(await page.getByLabel('First name', { exact: true }).inputValue(), 'Carol');
+        assert.equal(await page.getByLabel('Last name', { exact: true }).inputValue(), 'Browser Tester');
+        assert.equal(await page.getByLabel('Email address', { exact: true }).inputValue(), 'carol-browser@example.com');
+        await page.getByLabel('First name', { exact: true }).fill('Carol Updated');
+        await page.getByLabel('Last name', { exact: true }).fill('Browser Traveller');
+        await page.getByLabel('Email address', { exact: true }).fill('carol-updated@example.com');
+        await page.getByLabel('Current password', { exact: true }).fill('wrong');
         await page.locator('textarea').fill('Updated browser biography');
         await page.locator('textarea').press('Enter');
         assert.equal(await page.getByRole('button', { name: 'Save changes', exact: true }).count(), 1, 'Enter in a biography creates a newline');
         await page.locator('textarea').fill('Updated browser biography');
         await page.getByLabel('Age', { exact: true }).press('Enter');
+        await page.getByText('Your current password is incorrect.', { exact: true }).waitFor();
+        const unchangedCarol = await User.findOne({ email: 'carol-browser@example.com' });
+        assert.equal(unchangedCarol.firstname, 'Carol');
+        let failedProfileSave = false;
+        await page.route(base + '/graphql', route => {
+          if (!failedProfileSave && /mutation\s+updateProfile/.test(route.request().postDataJSON()?.query ?? '')) {
+            failedProfileSave = true;
+            return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ errors: [{ message: 'Temporary profile test failure.' }] }) });
+          }
+          return route.continue();
+        });
+        await page.getByLabel('Current password', { exact: true }).fill(rawPassword);
+        await page.getByLabel('Age', { exact: true }).press('Enter');
+        await page.getByText('Your account details were saved, but traveller information could not be saved. Please retry.', { exact: true }).waitFor();
+        const partiallySaved = await User.findById(unchangedCarol._id);
+        assert.equal(partiallySaved.email, 'carol-updated@example.com');
+        assert.equal(partiallySaved.firstname, 'Carol Updated');
+        assert.notEqual((await Profile.findOne({ profileUser: unchangedCarol._id })).bio, 'Updated browser biography');
+        await page.getByLabel('Age', { exact: true }).press('Enter');
+        await page.getByText('Profile updated.', { exact: true }).waitFor();
+        await page.unroute(base + '/graphql');
+        await page.getByRole('heading', { name: 'Carol Updated Browser Traveller', exact: true }).waitFor();
         await page.getByText('Updated browser biography', { exact: true }).waitFor();
+        await page.reload();
+        await page.getByRole('heading', { name: 'Carol Updated Browser Traveller', exact: true }).waitFor();
+        await page.getByText('carol-updated@example.com', { exact: true }).waitFor();
 
         await page.getByRole('link', { name: 'Start a New Trip', exact: true }).click();
         await page.setViewportSize({ width: 390, height: 844 });
@@ -393,7 +457,7 @@ test('account, profile, trip and photo flows enforce ownership against a real di
         await page.getByRole('heading', { name: 'Trip created', exact: true }).waitFor();
         assert.notEqual(await page.getByText('Your adventure is ready for travelmates to join.', { exact: true }).evaluate(element => getComputedStyle(element).color), 'rgb(255, 255, 255)');
         await page.getByText('Temporary test upload failure.', { exact: true }).waitFor();
-        const carol = await User.findOne({ email: 'carol-browser@example.com' });
+        const carol = await User.findOne({ email: 'carol-updated@example.com' });
         assert.equal(await Trip.countDocuments({ creator: carol._id }), 1);
         assert.equal((await Trip.findOne({ creator: carol._id })).startDate.slice(0, 10), displayDate(7), 'Trip calendar dates must not shift in the Sydney timezone');
         await page.getByRole('button', { name: 'Retry photo', exact: true }).click();
@@ -440,7 +504,7 @@ test('account, profile, trip and photo flows enforce ownership against a real di
         const ownCard = page.getByRole('article', { name: 'Dan organizes a trip', exact: true });
         await ownCard.getByText('Organizing', { exact: true }).waitFor();
         assert.equal(await ownCard.getByRole('button', { name: 'Join Trip' }).count(), 0);
-        await tripCard.getByRole('img', { name: "Carol Browser Tester's profile", exact: true }).waitFor();
+        await tripCard.getByRole('img', { name: "Carol Updated Browser Traveller's profile", exact: true }).waitFor();
         await page.waitForFunction(() => [...document.querySelectorAll('.trip-card__avatar img')].every(image => image.naturalWidth > 0));
         const heightBeforeJoin = (await tripCard.boundingBox()).height;
         await tripCard.getByRole('button', { name: 'Join Trip', exact: true }).click();
@@ -466,17 +530,37 @@ test('account, profile, trip and photo flows enforce ownership against a real di
         await page.setViewportSize({ width: 1280, height: 800 });
         await page.getByRole('link', { name: 'Logout', exact: true }).click();
         await page.goto(base + '/login');
-        await page.getByLabel('Email address').fill('carol-browser@example.com');
+        await page.getByLabel('Email address').fill('carol-updated@example.com');
         await page.getByLabel('Password', { exact: true }).fill(rawPassword);
         await page.getByLabel('Password', { exact: true }).press('Enter');
         await page.waitForURL(base + '/');
         await page.getByRole('link', { name: 'Profile', exact: true }).click();
         await page.getByText('Updated browser biography', { exact: true }).waitFor();
+        await page.getByRole('button', { name: 'Change password', exact: true }).click();
+        await page.getByLabel('Current password', { exact: true }).fill(rawPassword);
+        const updatedPassword = 'Updated browser password 2026!';
+        await page.getByLabel('New password', { exact: true }).fill(updatedPassword);
+        await page.getByLabel('Confirm new password', { exact: true }).fill('Different browser password!');
+        await page.getByLabel('Confirm new password', { exact: true }).press('Enter');
+        await page.getByText('The new passwords do not match.', { exact: true }).waitFor();
+        await page.getByLabel('Confirm new password', { exact: true }).fill(updatedPassword);
+        await page.getByLabel('Current password', { exact: true }).fill('wrong');
+        await page.getByLabel('Confirm new password', { exact: true }).press('Enter');
+        await page.getByText('Your current password is incorrect.', { exact: true }).waitFor();
+        await page.getByLabel('Current password', { exact: true }).fill(rawPassword);
+        await page.getByLabel('Confirm new password', { exact: true }).press('Enter');
+        await page.waitForURL(base + '/login');
+        await page.getByText('Password changed. Log in with your new password.', { exact: true }).waitFor();
+        assert.equal(await page.evaluate(() => localStorage.getItem('id_token')), null);
+        await page.getByLabel('Email address').fill('carol-updated@example.com');
+        await page.getByLabel('Password', { exact: true }).fill(updatedPassword);
+        await page.getByLabel('Password', { exact: true }).press('Enter');
+        await page.waitForURL(base + '/');
         await page.getByRole('link', { name: 'My trips', exact: true }).click();
         await page.getByRole('heading', { name: 'Browser travellers trip' }).waitFor();
         assert.equal(await page.getByRole('img', { name: 'Browser travellers trip', exact: true }).getAttribute('src'), updatedTripImage);
         assert.deepEqual(errors, [], 'Real account/trip pages should render without JavaScript errors');
-        console.log('Production browser profile redesign, hidden photo controls, delayed validation, city keyboard selection and Enter form submission passed');
+        console.log('Production browser profile account editing, email persistence, password confirmation and re-login, photo controls, validation and keyboard submission passed');
       } catch (failure) {
         const page = browser.contexts()[0]?.pages()[0];
         if (page) console.log('Browser failure context:', JSON.stringify({ url: page.url(), text: await page.locator('main').innerText(),

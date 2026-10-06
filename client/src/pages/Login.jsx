@@ -1,11 +1,12 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { useMutation } from '@apollo/client';
 import { LOGIN_USER } from '../utils/mutations';
 import Auth from '../utils/auth';
 import '../components/Forms.css';
 
 export default function Login() {
+  const { state } = useLocation();
   const [values, setValues] = useState({ email: '', password: '' });
   const [login, { error, loading }] = useMutation(LOGIN_USER);
   async function submit(event) {
@@ -17,6 +18,7 @@ export default function Login() {
   return (
     <main className="account-page account-page--narrow">
       <div className="account-page__heading"><h1>Log in</h1><p>Welcome back. Your next adventure is waiting.</p></div>
+      {state?.message && <output className="account-status">{state.message}</output>}
       <form className="form-panel" onSubmit={submit}>
         <fieldset disabled={loading}>
           <div className="form-fields">

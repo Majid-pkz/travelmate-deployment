@@ -73,7 +73,7 @@ const typeDefs = `
     createTripType( tripType: String!): TripType
     createInterests( label: String!): Interest
 
-    updateUser(id: ID!, firstname: String, lastname: String, email: String, password: String): User
+    updateUser(id: ID!, firstname: String, lastname: String, email: String, password: String, currentPassword: String): User
 
     updateProfile(id: ID!, location: String, gender: String, age: Int, bio: String,
       interests: [ID]): Profile

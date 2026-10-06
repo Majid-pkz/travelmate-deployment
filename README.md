@@ -138,6 +138,14 @@ The profile page uses a round avatar and an explicit Add/Change profile photo ac
 The photo editor closes after a successful upload and shows a confirmation; normal
 visits keep upload controls hidden. Profile details, interests and created trips
 have a responsive layout, with one Edit profile form and visible save/cancel states.
+This form includes first name, last name and login email as well as traveller
+details. Changing the email requires the current password and rejects an email
+already used by another account. Names and email refresh in the profile and trip
+cards after saving. Account and traveller changes use separate mutations; if only
+the account update succeeds, the editor reports that partial save and remains open
+for retry. Passwords are never displayed in the profile: a separate Change password
+form checks the current password and confirmation, then signs out all existing
+sessions and returns to login with a confirmation.
 
 Sign up, log in, profile creation/editing, trip creation and search use native form
 submission. Enter submits ordinary input fields, selects a highlighted city/interest

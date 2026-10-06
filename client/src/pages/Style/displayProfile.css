@@ -17,6 +17,8 @@
 .profile-interests li { font-size: .78rem; background: #edf5ef; border-radius: 999px; padding: 6px 12px; color: #42633e; }
 .profile-trip-list { padding-left: 18px; margin: 0; }
 .profile-photo-panel { margin-top: 24px; }
+.profile-security { margin-top: 24px; }
+.profile-security h2 { margin: 0; font-size: 1.15rem; font-weight: 700; }
 .profile-photo-editor { margin-top: 18px; }
 .profile-photo-editor img { width: 120px !important; height: 120px; border-radius: 50%; object-fit: cover !important; display: block; }
 .profile-photo-editor p { font-size: .78rem; color: #63716a; margin: 6px 0 12px; }

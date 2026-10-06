@@ -142,6 +142,17 @@ mutation joinTrip($joinTripId: ID!, $userJoining: ID!) {
 }
 `;
 
+export const UPDATE_USER = gql`
+mutation UpdateUser($id: ID!, $firstname: String, $lastname: String, $email: String, $password: String, $currentPassword: String) {
+  updateUser(id: $id, firstname: $firstname, lastname: $lastname, email: $email, password: $password, currentPassword: $currentPassword) {
+    _id
+    firstname
+    lastname
+    email
+  }
+}
+`;
+
 export const UPDATE_PROFILE = gql`
 mutation updateProfile($id: ID!, $location: String, $gender: String, $age: Int, $bio: String, $interests: [ID]) {
   updateProfile(id: $id, location: $location, gender: $gender, age: $age, bio: $bio, interests: $interests) {
