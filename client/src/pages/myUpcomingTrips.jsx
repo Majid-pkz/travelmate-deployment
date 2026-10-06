@@ -1,15 +1,17 @@
 import React from 'react';
 import { useQuery } from '@apollo/client';
-import oceanView from '../assets/oceanView.jpg';
+import { defaultTripPhoto, showDefaultTripPhoto } from '../utils/tripPhotos';
+import TripPhotoUpload from '../components/TripPhotoUpload';
 import { QUERY_MY_TRIPS } from '../utils/queries';
 import Auth from '../utils/auth';
 import { Navigate } from 'react-router-dom';
 
 const MyUpcomingTrips = () => {
   const userId = Auth.getProfile()?.data?._id;
-  const { loading, error, data} = useQuery(QUERY_MY_TRIPS, {
+  const { loading, error, data, refetch } = useQuery(QUERY_MY_TRIPS, {
     variables: { travelmates: userId },
     skip: !userId,
+    fetchPolicy: 'cache-and-network',
   });
 //   console.log(data.myTrips)
 const formatDate = (dateString) => {
@@ -21,7 +23,7 @@ const formatDate = (dateString) => {
   };
 
   if (!userId) return <Navigate to="/login" replace />;
-  if (loading) {
+  if (loading && !data) {
     return <div>Loading...</div>;
   }
 
@@ -41,7 +43,8 @@ const formatDate = (dateString) => {
       <div key={trip._id} className="col-md-6 col-lg-4" style={{paddingLeft:'20px', paddingRight:'25px', width: '100%'}}>
         <div className="card shadow ">
           {/* Display trip details */}
-          <img src={oceanView} alt={trip.title} className="card-img-top" height={'300px'} width={'100%'} />
+          <img src={trip.image || defaultTripPhoto} alt={trip.title} onError={showDefaultTripPhoto}
+            className="card-img-top" height={300} width="100%" style={{ objectFit: 'cover' }} />
           <div className="card-body">
             <h2 className="card-title" style={{ color: '#333333' }}>
               {trip.title}
@@ -66,6 +69,7 @@ const formatDate = (dateString) => {
                 <p style={{ color: '#333333' }}>{travelmate.firstname}{travelmate.email && <> - <a href={'mailto:' + travelmate.email}>{travelmate.email}</a></>}</p>
               </div>
             ))}
+            {trip.creator?._id === userId && <TripPhotoUpload trip={trip} onUploaded={refetch} />}
           </div>
         </div>
       </div>

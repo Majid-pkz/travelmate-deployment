@@ -19,7 +19,7 @@ import IconButton from '@mui/material/IconButton';
 import Typography from '@mui/material/Typography';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 
-import oceanView from '../assets/oceanView.jpg';
+import { defaultTripPhoto, showDefaultTripPhoto } from '../utils/tripPhotos';
 import AuthService from '../utils/auth';
 
 const ExpandMore = styled((props) => {
@@ -86,7 +86,7 @@ const TripCard = ({ trip }) => {
             {trip.creator.firstname}
           </Avatar>
         }
-        // title={<Typography variant="h4" color="var(--black)">{trip.title}</Typography>}
+        title={<Typography variant="h6" component="h2" color="var(--black)">{trip.title}</Typography>}
         // subheader={trip.endDate}
         
       />
@@ -96,7 +96,8 @@ const TripCard = ({ trip }) => {
         <Typography variant="subtitle1" color="text.secondary">
           To: {formatDate(trip.endDate)}
         </Typography>
-      <CardMedia component="img" height="150" image={oceanView} alt="Paella dish" />
+      <CardMedia component="img" height="150" image={trip.image || defaultTripPhoto}
+        alt={trip.title} onError={showDefaultTripPhoto} sx={{ objectFit: 'cover' }} />
       <CardContent>
         {/* <Typography variant="h6" color="text.secondary">
           {trip.description}
@@ -138,9 +139,10 @@ const Trips = () => {
 
   const { loading, error, data } = useQuery(SEARCH_TRIPS, {
     variables: { departureLocation: searchQuery },
+    fetchPolicy: 'cache-and-network',
   });
 
-  if (loading) {
+  if (loading && !data) {
     return <p>Loading...</p>;
   }
 
@@ -169,5 +171,3 @@ const Trips = () => {
 };
 
 export default Trips;
-
-

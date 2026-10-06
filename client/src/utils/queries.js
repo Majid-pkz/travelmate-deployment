@@ -32,6 +32,9 @@ export const QUERY_MY_TRIPS = gql`
   query  myTrips($travelmates: ID!) {
     myTrips(travelmates: $travelmates) {
       _id
+      creator {
+        _id
+      }
       title
       departureLocation
       description

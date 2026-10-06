@@ -26,6 +26,7 @@ const api = createServer(async (request, response) => {
             lastname: 'Traveller', email: 'test@example.com',
           },
           travelmates: [],
+          image: body.includes('BrokenPhoto') ? '/api/images/trips/missing' : null,
         }],
       } : { __typename: 'Query' },
     }));
@@ -126,8 +127,15 @@ async function checkFrontend(browser, mode) {
     await page.getByRole('heading', { name: 'No match for /missing-page' }).waitFor();
     await page.goto(base + '/trips?search=Sydney', { waitUntil: 'domcontentloaded' });
     await page.getByText(/Departure Location:.*Sydney/).waitFor();
+    await page.waitForFunction(() => document.querySelector('img[alt="Sydney road trip"]')?.naturalWidth > 0);
+    assert.match(await page.getByRole('img', { name: 'Sydney road trip', exact: true }).getAttribute('src'), /oceanView/);
     await page.getByRole('button', { name: 'Join Trip' }).click();
     await page.getByText('Log in to join this trip.').waitFor();
+    await page.goto(base + '/trips?search=BrokenPhoto', { waitUntil: 'domcontentloaded' });
+    await page.waitForFunction(() => {
+      const image = document.querySelector('img[alt="Sydney road trip"]');
+      return image?.naturalWidth > 0 && image.getAttribute('src').includes('oceanView');
+    });
     await page.goto(base + '/trips?search=NoMatches', { waitUntil: 'domcontentloaded' });
     await page.getByText('No trips found. Try Again!').waitFor();
     assert.deepEqual(errors, [], 'Pages should render without JavaScript errors');

@@ -151,6 +151,15 @@ New photos live in MongoDB and are served through /api/images; hosting restarts
 do not delete them. The original checked-in image URLs remain usable.
 Photo storage is subject to the Atlas tier's database capacity.
 
+Trip creation accepts an optional PNG/JPEG photo up to 2 MB, with a local preview.
+An organizer can also add or replace a photo on an existing trip from My trips.
+The API checks ownership before processing the upload, validates the file and
+re-encodes it as JPEG at no more than 1200 by 800 pixels. Trip photos live in
+MongoDB and survive server restarts. Search results and My trips show the saved
+photo, with the bundled default for trips without one or with an unavailable image.
+If an upload fails after trip creation, Retry photo updates the existing trip;
+it does not create a second trip.
+
 After pulling, stop both processes and install the locked dependencies:
 
 ~~~sh

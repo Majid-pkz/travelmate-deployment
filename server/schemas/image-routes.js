@@ -4,7 +4,7 @@ const multer = require('multer');
 const sharp = require('sharp');
 const { authMiddleware } = require('../utils/auth');
 const access = require('../utils/access');
-const { Profile } = require('../models');
+const { Profile, Trip } = require('../models');
 
 const router = express.Router();
 const upload = multer({
@@ -48,7 +48,7 @@ router.get('/profile', requireAccount, async (req, res, next) => {
   } catch (error) { next(error); }
 });
 
-router.post('/', requireAccount, (req, res, next) => {
+function readImage(req, res, next) {
   // Check authentication before Multer reads or stores the uploaded data.
   upload.single('image')(req, res, error => {
     if (error) {
@@ -59,22 +59,30 @@ router.post('/', requireAccount, (req, res, next) => {
     }
     next();
   });
-}, async (req, res, next) => {
+}
+
+async function resizedImage(req, res, width, height) {
+  if (!req.file) {
+    res.status(400).json({ error: 'Choose an image to upload.' });
+    return null;
+  }
   try {
-    if (!req.file) return res.status(400).json({ error: 'Choose an image to upload.' });
-    let imageData;
-    try {
-      const decoder = sharp(req.file.buffer, { limitInputPixels: 16_000_000, failOn: 'warning' });
-      const metadata = await decoder.metadata();
-      if (!['jpeg', 'png'].includes(metadata.format)) {
-        return res.status(415).json({ error: 'Choose a valid PNG or JPEG image.' });
-      }
-      imageData = await decoder
-        .rotate().resize(512, 512, { fit: 'inside', withoutEnlargement: true })
-        .flatten({ background: '#ffffff' }).jpeg({ quality: 80 }).toBuffer();
-    } catch {
-      return res.status(415).json({ error: 'Choose a valid PNG or JPEG image.' });
-    }
+    const decoder = sharp(req.file.buffer, { limitInputPixels: 16_000_000, failOn: 'warning' });
+    const metadata = await decoder.metadata();
+    if (!['jpeg', 'png'].includes(metadata.format)) throw new Error('Invalid image format');
+    return await decoder
+      .rotate().resize(width, height, { fit: 'inside', withoutEnlargement: true })
+      .flatten({ background: '#ffffff' }).jpeg({ quality: 80 }).toBuffer();
+  } catch {
+    res.status(415).json({ error: 'Choose a valid PNG or JPEG image.' });
+    return null;
+  }
+}
+
+router.post('/', requireAccount, readImage, async (req, res, next) => {
+  try {
+    const imageData = await resizedImage(req, res, 512, 512);
+    if (!imageData) return;
     const image = '/api/images/profile/' + req.user._id + '?v=' + randomUUID();
     const profile = await Profile.findOneAndUpdate(
       { profileUser: req.user._id }, { $set: { image, imageData } },
@@ -82,6 +90,39 @@ router.post('/', requireAccount, (req, res, next) => {
     );
     if (!profile) return res.status(404).json({ error: 'Create your profile first.' });
     res.json({ message: 'Profile photo updated.', image });
+  } catch (error) { next(error); }
+});
+
+async function requireTripOwner(req, res, next) {
+  try {
+    if (!/^[a-f\d]{24}$/i.test(req.params.tripId) || !await Trip.exists({ _id: req.params.tripId, creator: req.user._id })) {
+      return res.status(404).json({ error: 'Trip was not found, or you do not have permission to change it.' });
+    }
+    next();
+  } catch (error) { next(error); }
+}
+
+router.get('/trips/:tripId', async (req, res, next) => {
+  try {
+    if (!/^[a-f\d]{24}$/i.test(req.params.tripId)) return res.sendStatus(404);
+    const trip = await Trip.findById(req.params.tripId).select('+imageData');
+    if (!trip?.imageData) return res.sendStatus(404);
+    res.set('Cache-Control', 'no-store');
+    res.type('jpeg').send(trip.imageData);
+  } catch (error) { next(error); }
+});
+
+router.post('/trips/:tripId', requireAccount, requireTripOwner, readImage, async (req, res, next) => {
+  try {
+    const imageData = await resizedImage(req, res, 1200, 800);
+    if (!imageData) return;
+    const image = '/api/images/trips/' + req.params.tripId + '?v=' + randomUUID();
+    const trip = await Trip.findOneAndUpdate(
+      { _id: req.params.tripId, creator: req.user._id }, { $set: { image, imageData } },
+      { new: true, runValidators: true },
+    );
+    if (!trip) return res.status(404).json({ error: 'Trip was not found, or you do not have permission to change it.' });
+    res.json({ message: 'Trip photo updated.', image });
   } catch (error) { next(error); }
 });
 

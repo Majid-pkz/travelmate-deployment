@@ -20,7 +20,7 @@ test('account, profile, trip and photo flows enforce ownership against a real di
   await mongoose.connect(uri, { serverSelectionTimeoutMS: 10_000 });
   await Promise.all([User.init(), Profile.init()]);
   await Promise.all([User.deleteMany({}), Profile.deleteMany({}), Trip.deleteMany({}), Interest.deleteMany({})]);
-  const { server, httpServer } = await createApp();
+  let { server, httpServer } = await createApp();
   httpServer.listen(0, '127.0.0.1');
   await once(httpServer, 'listening');
   const base = 'http://127.0.0.1:' + httpServer.address().port;
@@ -45,15 +45,15 @@ test('account, profile, trip and photo flows enforce ownership against a real di
   }
   const rawPassword = 'Private test password 2026!';
   const registration = 'mutation($first:String!,$email:String!,$password:String!){createUser(firstname:$first,lastname:"Tester",email:$email,password:$password){token user{_id firstname}}}';
-  let alice, bob, aliceProfile, bobProfile, aliceTrip, bobTrip;
+  let alice, bob, aliceProfile, bobProfile, aliceTrip, bobTrip, aliceProfileImage, aliceTripImage;
   const profileMutation = 'mutation($owner:ID!){createProfile(profileUser:$owner,location:"Sydney",age:30,bio:"Test traveller"){_id profileUser{_id} tripCount}}';
   const tripMutation = 'mutation($owner:ID!){createTrip(creator:$owner,title:"Test trip",description:"A test trip",departureLocation:"Sydney (West)",destination:"Blue Mountains",startDate:"2027-01-10",endDate:"2027-01-12"){_id creator{_id} travelmates{_id}}}';
   const join = 'mutation($trip:ID!,$user:ID!){joinTrip(id:$trip,userJoining:$user){_id travelmates{_id email}}}';
   const myTrips = 'query($user:ID!){myTrips(travelmates:$user){_id}}';
-  async function upload(buffer, type = 'image/png', token) {
+  async function upload(buffer, type = 'image/png', token, path = '/api/images') {
     const form = new FormData();
     if (buffer) form.append('image', new Blob([buffer], { type }), 'photo.png');
-    return fetch(base + '/api/images', { method: 'POST', headers: token ? { authorization: 'Bearer ' + token } : {}, body: form });
+    return fetch(base + path, { method: 'POST', headers: token ? { authorization: 'Bearer ' + token } : {}, body: form });
   }
 
   await t.test('registration normalizes email and hashes passwords; users cannot self-register as administrators', async () => {
@@ -140,6 +140,7 @@ test('account, profile, trip and photo flows enforce ownership against a real di
     const response = await upload(png, 'image/png', alice.token);
     assert.equal(response.status, 200);
     const image = (await response.json()).image;
+    aliceProfileImage = image;
     const stored = await Profile.findById(aliceProfile._id).select('+imageData');
     assert.ok(stored.imageData.length > 0);
     assert.equal((await Profile.findById(bobProfile._id)).imageData, undefined);
@@ -150,6 +151,50 @@ test('account, profile, trip and photo flows enforce ownership against a real di
     const privateProfile = await fetch(base + '/api/images/profile', { headers: { authorization: 'Bearer ' + alice.token } });
     assert.equal((await privateProfile.json()).imageData, undefined);
   });
+  await t.test('only the organizer can add or replace a validated trip photo; photos are optional and stay out of JSON', async () => {
+    const path = '/api/images/trips/' + aliceTrip._id;
+    assert.equal((await upload(null, 'image/png', undefined, path)).status, 401);
+    assert.equal((await upload(null, 'image/png', bob.token, path)).status, 404);
+    assert.equal((await upload(null, 'image/png', alice.token, path)).status, 400);
+    assert.equal((await upload(Buffer.from('invalid'), 'image/png', alice.token, path)).status, 415);
+    assert.equal((await upload(Buffer.alloc(2 * 1024 * 1024 + 1), 'image/png', alice.token, path)).status, 413);
+    const first = await sharp({ create: { width: 1800, height: 1200, channels: 3, background: '#ff9900' } }).png().toBuffer();
+    const response = await upload(first, 'image/png', alice.token, path);
+    assert.equal(response.status, 200);
+    const firstImage = (await response.json()).image;
+    const stored = await Trip.findById(aliceTrip._id).select('+imageData');
+    assert.ok(stored.imageData.length > 0);
+    assert.equal((await Trip.findById(aliceTrip._id)).imageData, undefined);
+    const photo = await fetch(base + firstImage);
+    assert.equal(photo.headers.get('content-type'), 'image/jpeg');
+    const metadata = await sharp(Buffer.from(await photo.arrayBuffer())).metadata();
+    assert.ok(metadata.width <= 1200 && metadata.height <= 800);
+    const second = await sharp({ create: { width: 600, height: 400, channels: 3, background: '#2299cc' } }).png().toBuffer();
+    const changed = await upload(second, 'image/png', alice.token, path);
+    assert.equal(changed.status, 200);
+    aliceTripImage = (await changed.json()).image;
+    assert.notEqual(aliceTripImage, firstImage);
+    assert.notDeepEqual((await Trip.findById(aliceTrip._id).select('+imageData')).imageData, stored.imageData);
+    const result = success(await query('query($id:ID!){trip(id:$id){image}}', { id: bobTrip._id }));
+    assert.equal(result.trip.image, null);
+    assert.equal((await fetch(base + '/api/images/trips/' + bobTrip._id)).status, 404);
+    assert.equal((await fetch(base + '/api/images/trips/invalid')).status, 404);
+    assert.equal((await Profile.findById(aliceProfile._id)).image, aliceProfileImage);
+  });
+  await t.test('profile and trip photos survive an HTTP server restart and remain visible in search and My trips', async () => {
+    await server.stop();
+    const restarted = await createApp();
+    server = restarted.server;
+    httpServer = restarted.httpServer;
+    httpServer.listen(Number(new URL(base).port), '127.0.0.1');
+    await once(httpServer, 'listening');
+    assert.equal((await fetch(base + aliceProfileImage)).status, 200);
+    assert.equal((await fetch(base + aliceTripImage)).status, 200);
+    const search = success(await query('{searchTrips(departureLocation:"West"){_id image}}')).searchTrips;
+    assert.equal(search.find(trip => trip._id === aliceTrip._id).image, aliceTripImage);
+    const own = success(await query('query($user:ID!){myTrips(travelmates:$user){_id image}}', { user: alice.user._id }, alice.token)).myTrips;
+    assert.equal(own.find(trip => trip._id === aliceTrip._id).image, aliceTripImage);
+  });
   await t.test('password changes stay hashed and revoke the old token across GraphQL and uploads', async () => {
     const nextPassword = 'Updated private test password!';
     success(await query('mutation($id:ID!,$password:String!){updateUser(id:$id,password:$password){_id}}', { id: alice.user._id, password: nextPassword }, alice.token));
@@ -158,6 +203,7 @@ test('account, profile, trip and photo flows enforce ownership against a real di
     assert.equal(await bcrypt.compare(rawPassword, stored.password), false);
     denied(await query(myTrips, { user: alice.user._id }, alice.token), 'UNAUTHENTICATED');
     assert.equal((await upload(Buffer.from('unused'), 'image/png', alice.token)).status, 401);
+    assert.equal((await upload(null, 'image/png', alice.token, '/api/images/trips/' + aliceTrip._id)).status, 401);
     const login = 'mutation($password:String!){login(email:"alice@example.com",password:$password){token}}';
     denied(await query(login, { password: rawPassword }), 'UNAUTHENTICATED');
     alice.token = success(await query(login, { password: nextPassword })).login.token;
@@ -166,6 +212,7 @@ test('account, profile, trip and photo flows enforce ownership against a real di
     const remove = 'mutation($id:ID!){removeTrip(id:$id){_id}}';
     denied(await query(remove, { id: aliceTrip._id }, bob.token), 'NOT_FOUND');
     success(await query(remove, { id: aliceTrip._id }, alice.token));
+    assert.equal((await fetch(base + aliceTripImage)).status, 404);
     assert.equal((await Profile.findById(aliceProfile._id)).tripCount, 0);
     assert.ok(await Trip.findById(bobTrip._id));
     success(await query('mutation($id:ID!){deleteUser(id:$id){_id}}', { id: bob.user._id }, bob.token));
@@ -238,22 +285,62 @@ test('account, profile, trip and photo flows enforce ownership against a real di
         await page.getByText('Updated browser biography', { exact: true }).waitFor();
 
         await page.getByRole('link', { name: 'Start a New Trip', exact: true }).click();
-        await page.getByPlaceholder('Title', { exact: true }).fill('Browser travellers trip');
-        await page.getByPlaceholder('Description', { exact: true }).fill('A trip created in the real browser test');
-        await page.getByPlaceholder('Departure Location', { exact: true }).fill('Browser departure');
-        await page.getByPlaceholder('Destination', { exact: true }).fill('Blue Mountains');
         function displayDate(days) {
           const date = new Date(Date.now() + days * 86_400_000);
           return [date.getDate(), date.getMonth() + 1, date.getFullYear()].map((part, index) => index < 2 ? String(part).padStart(2, '0') : part).join('/');
         }
-        await page.getByPlaceholder('Start Date', { exact: true }).fill(displayDate(7));
-        await page.getByPlaceholder('Start Date', { exact: true }).press('Tab');
-        await page.getByPlaceholder('End Date', { exact: true }).fill(displayDate(9));
-        await page.getByPlaceholder('End Date', { exact: true }).press('Tab');
+        async function fillTrip(title, departure) {
+          await page.getByPlaceholder('Title', { exact: true }).fill(title);
+          await page.getByPlaceholder('Description', { exact: true }).fill('A trip created in the real browser test');
+          await page.getByPlaceholder('Departure Location', { exact: true }).fill(departure);
+          await page.getByPlaceholder('Destination', { exact: true }).fill('Blue Mountains');
+          await page.getByPlaceholder('Start Date', { exact: true }).fill(displayDate(7));
+          await page.getByPlaceholder('Start Date', { exact: true }).press('Tab');
+          await page.getByPlaceholder('End Date', { exact: true }).fill(displayDate(9));
+          await page.getByPlaceholder('End Date', { exact: true }).press('Tab');
+        }
+        await fillTrip('Browser travellers trip', 'Browser departure');
+        await page.getByLabel('Trip photo (optional)', { exact: true }).setInputFiles({ name: 'invalid.txt', mimeType: 'text/plain', buffer: Buffer.from('invalid') });
+        await page.getByText('Choose a PNG or JPEG image.', { exact: true }).waitFor();
+        assert.equal(await page.getByRole('button', { name: 'Submit', exact: true }).isDisabled(), true);
+        await page.getByLabel('Trip photo (optional)', { exact: true }).setInputFiles({ name: 'trip.png', mimeType: 'image/png', buffer: png });
+        let photoAttempts = 0;
+        await page.route(base + '/api/images/trips/*', route => {
+          if (route.request().method() === 'POST' && ++photoAttempts === 1) {
+            return route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: 'Temporary test upload failure.' }) });
+          }
+          return route.continue();
+        });
+        await page.getByRole('button', { name: 'Submit', exact: true }).click();
+        await page.getByText(/Success! You may now head/).waitFor();
+        await page.getByText('Temporary test upload failure.', { exact: true }).waitFor();
+        const carol = await User.findOne({ email: 'carol-browser@example.com' });
+        assert.equal(await Trip.countDocuments({ creator: carol._id }), 1);
+        await page.getByRole('button', { name: 'Retry photo', exact: true }).click();
+        await page.getByText('Trip photo saved.', { exact: true }).waitFor();
+        assert.equal(await Trip.countDocuments({ creator: carol._id }), 1, 'A photo retry must not create another trip');
+        await page.getByRole('link', { name: 'My trips', exact: true }).click();
+        await page.getByRole('heading', { name: 'Browser travellers trip' }).waitFor();
+        await page.waitForFunction(() => document.querySelector('img[alt="Browser travellers trip"]')?.naturalWidth > 0);
+        const firstTripImage = await page.getByRole('img', { name: 'Browser travellers trip', exact: true }).getAttribute('src');
+        assert.match(firstTripImage, /^\/api\/images\/trips\//);
+        await page.getByRole('button', { name: 'Change trip photo', exact: true }).click();
+        const blue = await sharp({ create: { width: 32, height: 32, channels: 3, background: '#2299cc' } }).png().toBuffer();
+        await page.getByLabel('Trip photo', { exact: true }).setInputFiles({ name: 'replacement.png', mimeType: 'image/png', buffer: blue });
+        await page.getByRole('button', { name: 'Upload trip photo', exact: true }).click();
+        await page.getByText('Trip photo updated.', { exact: true }).waitFor();
+        await page.waitForFunction(previous => {
+          const image = document.querySelector('img[alt="Browser travellers trip"]');
+          return image?.naturalWidth > 0 && image.getAttribute('src') !== previous;
+        }, firstTripImage);
+        const updatedTripImage = await page.getByRole('img', { name: 'Browser travellers trip', exact: true }).getAttribute('src');
+        await page.getByRole('link', { name: 'Start a New Trip', exact: true }).click();
+        await fillTrip('Trip without photo', 'Other departure');
         await page.getByRole('button', { name: 'Submit', exact: true }).click();
         await page.getByText(/Success! You may now head/).waitFor();
         await page.getByRole('link', { name: 'My trips', exact: true }).click();
-        await page.getByRole('heading', { name: 'Browser travellers trip' }).waitFor();
+        await page.getByRole('heading', { name: 'Trip without photo' }).waitFor();
+        assert.match(await page.getByRole('img', { name: 'Trip without photo', exact: true }).getAttribute('src'), /oceanView/);
         await page.getByRole('link', { name: 'Logout', exact: true }).click();
         await page.locator('header').getByRole('link', { name: 'Login', exact: true }).waitFor();
 
@@ -262,10 +349,13 @@ test('account, profile, trip and photo flows enforce ownership against a real di
         await page.goto(base + '/');
         await page.getByRole('searchbox', { name: 'Departure location' }).fill('Browser departure');
         await page.getByRole('button', { name: 'Search trips', exact: true }).click();
+        await page.getByRole('img', { name: 'Browser travellers trip', exact: true }).waitFor();
+        assert.equal(await page.getByRole('img', { name: 'Browser travellers trip', exact: true }).getAttribute('src'), updatedTripImage);
         await page.getByRole('button', { name: 'Join Trip', exact: true }).click();
         await page.getByText('Successfully joined the trip!', { exact: false }).waitFor();
         await page.getByRole('link', { name: 'View your trips', exact: true }).click();
         await page.getByRole('heading', { name: 'Browser travellers trip' }).waitFor();
+        assert.equal(await page.getByRole('button', { name: /(?:Add|Change) trip photo/ }).count(), 0);
         await page.getByRole('link', { name: 'Logout', exact: true }).click();
         await page.goto(base + '/login');
         await page.getByLabel('Email address').fill('carol-browser@example.com');
@@ -274,8 +364,11 @@ test('account, profile, trip and photo flows enforce ownership against a real di
         await page.waitForURL(base + '/');
         await page.getByRole('link', { name: 'Profile', exact: true }).click();
         await page.getByText('Updated browser biography', { exact: true }).waitFor();
+        await page.getByRole('link', { name: 'My trips', exact: true }).click();
+        await page.getByRole('heading', { name: 'Browser travellers trip' }).waitFor();
+        assert.equal(await page.getByRole('img', { name: 'Browser travellers trip', exact: true }).getAttribute('src'), updatedTripImage);
         assert.deepEqual(errors, [], 'Real account/trip pages should render without JavaScript errors');
-        console.log('Production browser account/profile/photo/trip create and join flows passed');
+        console.log('Production browser account/profile/trip/photo flows, upload retry, replacement and default photos passed');
       } finally { await browser.close(); }
     });
   }

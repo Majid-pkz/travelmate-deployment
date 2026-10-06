@@ -93,7 +93,8 @@ export const CREATE_TRIP = gql`
       startDate: $startDate
       endDate: $endDate
     ) {
-      
+      _id
+      image
       title
       travelmates {
         email
