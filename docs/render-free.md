@@ -9,8 +9,9 @@ The static frontend is served by Render's CDN and opens even when the API is
 asleep. Render Free web services sleep after 15 minutes without requests and
 usually need about a minute to restart. The frontend requests the health endpoint
 when a visitor opens it, displays a starting message if needed, and stops retries
-after 90 seconds with a Try again button. Account/trip submissions are not
-automatically retried. This is a portfolio demo with free-tier availability limits.
+after 90 seconds with a Try again button. Mounted GraphQL reads refresh when the
+API becomes ready after a delay; account/trip submissions are not automatically
+retried. This is a portfolio demo with free-tier availability limits.
 
 Both services use included bandwidth/build quotas; the API also shares the
 workspace's 750 free instance hours each month. Keep other free services in mind.

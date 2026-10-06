@@ -50,12 +50,17 @@ const client = new ApolloClient({
   cache: new InMemoryCache(),
 });
 
+function refreshLiveQueries() {
+  // Recover mounted reads after a cold start; never replay submitted mutations.
+  void client.refetchQueries({ include: 'active' }).catch(() => {});
+}
+
 function App() {
   return (
     <ApolloProvider client={client}>
       <Router>
         <Header />
-        <ApiStatus />
+        <ApiStatus onReady={refreshLiveQueries} />
         <Suspense fallback={<output className="d-block text-center py-4">Loading page...</output>}>
         <Routes>
           <Route

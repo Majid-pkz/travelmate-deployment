@@ -48,6 +48,10 @@ const api = createServer(async (request, response) => {
   }
   if (request.url === '/api/images/profile/missing') { response.writeHead(404).end(); return; }
   response.setHeader('Content-Type', 'application/json');
+  if (request.url === '/graphql' && !healthAvailable) {
+    response.writeHead(503).end(JSON.stringify({ error: 'The test API is waking.' }));
+    return;
+  }
   if (request.url === '/api/health' && !request.headers.authorization) {
     response.statusCode = healthAvailable ? 200 : 503;
     response.end(JSON.stringify({ status: healthAvailable ? 'ok' : 'unavailable' }));
@@ -244,16 +248,17 @@ async function checkFrontend(browser, mode) {
     if (mode === 'split') {
       assert.equal(new URL(await joined.locator('.trip-card__avatar img').getAttribute('src')).origin, apiBase);
       healthAvailable = false;
-      await page.goto(base);
+      await page.goto(base + '/trips?search=Sydney');
       await page.getByText('Live features are starting.', { exact: false }).waitFor();
-      await page.getByRole('heading', { name: /Welcome to Travelmate/i }).waitFor();
+      assert.equal(await page.locator('header').isVisible(), true, 'Static navigation must remain usable while the API wakes');
       await page.clock.install();
       await page.clock.fastForward(95_000);
       await page.getByRole('button', { name: 'Try again', exact: true }).waitFor();
       healthAvailable = true;
       await page.getByRole('button', { name: 'Try again', exact: true }).click();
       await page.waitForFunction(() => !document.querySelector('.api-status'));
-      console.log('Separate frontend/API origins, saved photos, slow startup, bounded failure and manual retry passed');
+      await page.getByRole('heading', { name: 'Sydney road trip', exact: true }).waitFor();
+      console.log('Separate frontend/API origins, saved photos, slow startup, bounded failure, manual retry and failed-read recovery passed');
     }
     assert.deepEqual(errors, [], 'Pages should render without JavaScript errors');
     console.log(mode + ': page rendering, trip membership states, equal card heights, avatar fallbacks, global city selection, Enter search, provider fallback, keyboard details, mobile layout, private routes and proxies passed');
