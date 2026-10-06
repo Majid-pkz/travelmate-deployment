@@ -1,6 +1,6 @@
 import React from 'react';
 import { useState } from 'react'
-import { NavLink, Link, useNavigate} from 'react-router-dom';
+import { NavLink, Link } from 'react-router-dom';
 import Logo from '../../assets/logo.png';
 import MenuIcon from '@mui/icons-material/Menu';
 import './Header.css'
@@ -8,7 +8,6 @@ import './Header.css'
 import Auth from '../../utils/auth';
 
 const Header = () => {
-  const navigate  = useNavigate()
   const [showNavbar, setShowNavbar] = useState(false)
 
   const handleShowNavbar = () => {
@@ -17,9 +16,7 @@ const Header = () => {
   const logout = (event) => {
     event.preventDefault();
     Auth.logout();
-    navigate("/")
-    // or instead of useNavigate:
-    //window.location.href = "/";
+    window.location.assign('/');
   };
 
   return (
@@ -57,6 +54,11 @@ const Header = () => {
               <li>
                 <NavLink to="/new-trip" onClick={handleShowNavbar}>
                   Start a New Trip
+                </NavLink>
+              </li>
+              <li>
+                <NavLink to="/my-upcoming-trips" onClick={handleShowNavbar}>
+                  My trips
                 </NavLink>
               </li>
               <li>

@@ -7,6 +7,7 @@ const profileSchema = new Schema(
       type: Schema.Types.ObjectId,
       ref: "User",
       required: true,
+      unique: true,
     },
 
 
@@ -37,6 +38,10 @@ const profileSchema = new Schema(
     image:{
       type: String,
 
+    },
+    imageData: {
+      type: Buffer,
+      select: false,
     },
     verified:{
       type: Boolean,
@@ -76,7 +81,7 @@ const profileSchema = new Schema(
 
 // when we query a user, we'll also get another field called `TripCount` with the number of created trip
 profileSchema.virtual('tripCount').get(function () {
-  return this.createdTrips.length;
+  return this.createdTrips.filter(Boolean).length;
 });
 
 

@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, Navigate } from "react-router-dom";
 import { useMutation } from "@apollo/client";
 import { CREATE_TRIP } from "../utils/mutations";
 import DatePicker from "react-datepicker";
@@ -8,16 +8,15 @@ import "./Style/StartTrip.css";
 import Auth from "../utils/auth";
 
 const StartTrip = () => {
-  const token = localStorage.getItem('id_token');
-  const userData = Auth.getProfile(token);
+  const userId = Auth.getProfile()?.data?._id;
   const [formState, setFormState] = useState({
-    creator: userData.data._id,
+    creator: userId || '',
     title: "",
     description: "",
     departureLocation: "",
     destination: "",
-    startDate: "",
-    endDate: "",
+    startDate: null,
+    endDate: null,
   });
 
   const [createTrip, { error, data }] = useMutation(CREATE_TRIP);
@@ -50,7 +49,11 @@ const StartTrip = () => {
 
     try {
       await createTrip({
-        variables: { ...formState },
+        variables: {
+          ...formState,
+          startDate: formState.startDate?.toISOString(),
+          endDate: formState.endDate?.toISOString(),
+        },
       });
 
     } catch (e) {
@@ -58,6 +61,7 @@ const StartTrip = () => {
     }
   };
 
+  if (!userId) return <Navigate to="/login" replace />;
   return (
     <main className="custom-trip flex-row justify-center ">
     <div className="col-12 col-lg-6">
@@ -137,6 +141,7 @@ const StartTrip = () => {
                   minDate={new Date()}
                   isClearable
                   placeholderText="Start Date"
+                  required
                 />
               </div>
             </div>
@@ -150,6 +155,7 @@ const StartTrip = () => {
                   minDate={formState.startDate}
                   isClearable
                   placeholderText="End Date"
+                  required
                 />
               </div>
             </div>
@@ -176,7 +182,6 @@ const StartTrip = () => {
 };
 
 export default StartTrip;
-
 
 
 

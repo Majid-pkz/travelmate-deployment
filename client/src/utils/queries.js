@@ -146,7 +146,6 @@ query SearchTrips($departureLocation: String) {
       firstname
       lastname
       email
-      password
       isAdmin
     }
     title
@@ -168,7 +167,6 @@ query SearchTrips($departureLocation: String) {
       firstname
       lastname
       email
-      password
       isAdmin
     }
   }

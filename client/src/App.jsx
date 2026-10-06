@@ -1,7 +1,8 @@
 import React, { lazy, Suspense } from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { ApolloClient, ApolloProvider, InMemoryCache, createHttpLink, } from '@apollo/client';
 import { setContext } from '@apollo/client/link/context';
+import Auth from './utils/auth';
 
 
 import Home from './pages/Home/Home';
@@ -17,6 +18,11 @@ const MyUpcomingTrips = lazy(() => import('./pages/myUpcomingTrips'));
 const Profile = lazy(() => import('./pages/createProfile'));
 const PersonalProfile = lazy(() => import('./pages/displayProfile'));
 const GroupExample = lazy(() => import('./pages/ProfileCards'));
+const NotFound = lazy(() => import('./pages/NotFound'));
+
+function PrivatePage({ children }) {
+  return Auth.loggedIn() ? children : <Navigate to="/login" replace />;
+}
 
 // Construct our main GraphQL API endpoint
 const httpLink = createHttpLink({
@@ -68,7 +74,7 @@ function App() {
 
           <Route
             path="/new-trip"
-            element={< StartTrip />}
+            element={<PrivatePage><StartTrip /></PrivatePage>}
           />
           <Route
             path="/single"
@@ -77,16 +83,16 @@ function App() {
 
           <Route
             path="/upload"
-            element={<FileUpload />}
+            element={<PrivatePage><FileUpload /></PrivatePage>}
           />
 
           <Route
             path="/create-profile"
-            element={<Profile />}
+            element={<PrivatePage><Profile /></PrivatePage>}
           />
           <Route
             path="/my-profile"
-            element={<PersonalProfile />}
+            element={<PrivatePage><PersonalProfile /></PrivatePage>}
           />
           <Route
             path="/all-profiles"
@@ -95,13 +101,14 @@ function App() {
 
           <Route
             path="/my-upcoming-trips"
-            element={<MyUpcomingTrips />}
+            element={<PrivatePage><MyUpcomingTrips /></PrivatePage>}
           />
 
 
 
 
 
+          <Route path="*" element={<NotFound />} />
         </Routes>
         </Suspense>
         {/* </div> */}

@@ -45,8 +45,8 @@ export const CREATE_USER = gql`
 // }
 
 export const CREATE_PROFILE = gql`
-mutation createProfile($profileUser: ID!, $location: String, $joinedDate: String, $gender: String, $age: Int, $bio: String, $interests: [ID], $image: String, $verified: Boolean, $subscribed: Boolean, $createdTrips: ID, $tripCount: Int) {
-  createProfile(profileUser: $profileUser, location: $location, joinedDate: $joinedDate, gender: $gender, age: $age, bio: $bio, interests: $interests, image: $image, verified: $verified, subscribed: $subscribed, createdTrips: $createdTrips, tripCount: $tripCount) {
+mutation createProfile($profileUser: ID!, $location: String, $gender: String, $age: Int, $bio: String, $interests: [ID]) {
+  createProfile(profileUser: $profileUser, location: $location, gender: $gender, age: $age, bio: $bio, interests: $interests) {
     _id
     profileUser {
       _id
@@ -114,7 +114,6 @@ mutation joinTrip($joinTripId: ID!, $userJoining: ID!) {
       firstname
       lastname
       email
-      password
       isAdmin
     }
     title
@@ -136,7 +135,6 @@ mutation joinTrip($joinTripId: ID!, $userJoining: ID!) {
       firstname
       lastname
       email
-      password
       isAdmin
     }
   }

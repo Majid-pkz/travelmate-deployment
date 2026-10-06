@@ -31,9 +31,8 @@ Private environment configuration replaces the hardcoded JWT secret with a
 required runtime value. The frontend now uses React 18 and Vite, with standalone
 Oxlint checks, updated Axios and React Router 7 packages, and the unused legacy
 libraries removed. React components use the `.jsx` extension; the existing
-application and routes remain in place. Authorization, password handling, UI
-reliability, backend dependency updates, durable image uploads and deployment
-remain in progress. These initial updates do not make the application ready for
+application and routes remain in place. Backend ownership checks, password handling, dependency updates and durable
+profile photos are included. Live Atlas validation and deployment remain in progress. These initial updates do not make the application ready for
 public use.
 
 Page bundles load on demand. Bootstrap CSS is bundled locally, and navigation,
@@ -70,7 +69,7 @@ npm run test:config
 
 These checks verify environment loading, runtime-variable precedence, required
 secret validation and optional DNS configuration. They do not verify database connectivity or complete user flows.
-Complete user flows and backend security still need validation.
+Live Atlas and hosting checks remain pending.
 
 ## Local frontend development
 
@@ -132,3 +131,65 @@ setting accepts comma-separated IPv4 or IPv6 addresses and is applied before the
 database connection starts. It affects Node's DNS resolution in this process.
 Leave it blank or omit it to use the normal resolver in other environments,
 including hosting. Hosted values take precedence over a local file.
+
+## Backend validation and durable profile photos
+
+The API now uses Apollo Server 5 with the existing Express app. Account,
+profile and trip changes verify the signed-in account and record ownership.
+Password changes run the model's hashing hook and revoke older tokens.
+Passwords are absent from GraphQL responses. Contact emails are available to
+account owners and participants on the same trip, rather than public visitors.
+
+Private pages redirect anonymous, expired or malformed sessions to login.
+An account without a profile opens the creation form. My trips includes both
+organized and joined trips.
+
+Authenticated users with a profile can upload PNG/JPEG photos up to 2 MB.
+The server validates and re-encodes them, limits input to 16 million pixels,
+resizes to at most 512 by 512 pixels and removes original image metadata.
+New photos live in MongoDB and are served through /api/images; hosting restarts
+do not delete them. The original checked-in image URLs remain usable.
+Photo storage is subject to the Atlas tier's database capacity.
+
+After pulling, stop both processes and install the locked dependencies:
+
+~~~sh
+npm ci --prefix server
+npm ci --prefix client
+npm run test:config
+npm run test:server
+~~~
+
+Initialize the interest/trip-type catalogue when needed:
+
+~~~sh
+npm run seed
+~~~
+
+This command adds missing catalogue entries and preserves accounts, profiles
+and trips. It replaces the original destructive demo-data seeder and can be
+run again.
+
+Watch mode now uses Node's built-in watcher. For the combined development command,
+install the root development dependency without running the old install hook:
+
+~~~sh
+npm ci --ignore-scripts
+npm run develop
+~~~
+
+GitHub Actions uses a disposable MongoDB service for ownership, password,
+profile, trip and image integration tests. A Chromium test also completes the
+real production signup, profile/photo editing, trip creation/joining and
+logout/login flows. It never uses the private Atlas connection.
+
+Local integration tests require MONGODB_TEST_URI to explicitly identify a
+disposable local database whose name starts with travelmate_test_. The tests
+clear that database. They do not read MONGODB_URI.
+
+~~~sh
+npm run test:integration --prefix server
+~~~
+
+Live Atlas checks, hosting, image-asset optimization and portfolio presentation
+remain to be completed.

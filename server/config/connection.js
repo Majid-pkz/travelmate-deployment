@@ -18,7 +18,7 @@ if (dnsServers) {
   dns.setServers(servers);
 }
 
-mongoose.connect(uri);
+const ready = mongoose.connect(uri);
 
 module.exports = mongoose.connection;
-
+module.exports.ready = ready;
