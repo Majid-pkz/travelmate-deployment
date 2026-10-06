@@ -15,7 +15,7 @@ export default function ApiStatus({ onReady }) {
       timers.add(timer);
       return timer;
     };
-    setStatus('checking');
+    setStatus(attempt > 0 ? 'starting' : 'checking');
     later(() => { retryReads = true; setStatus('starting'); }, 1200);
     const deadline = Date.now() + 90_000;
     async function check() {
@@ -50,8 +50,15 @@ export default function ApiStatus({ onReady }) {
   }, [attempt, onReady]);
   if (!apiBaseUrl || status === 'checking' || status === 'ready') return null;
   return <output className="api-status" aria-live="polite">
-    {status === 'starting'
-      ? 'Live features are starting. Please allow up to a minute for accounts and trips to become available.'
-      : <>Live features are temporarily unavailable. <button type="button" onClick={() => setAttempt(value => value + 1)}>Try again</button></>}
+    <span className="api-status__text">
+      <strong>{status === 'starting' ? 'TravelMate is waking up.' : 'The demo is taking longer than expected.'}</strong>
+      <span>{status === 'starting'
+        ? 'This demo uses free hosting and usually wakes up in about a minute. Keep this page open; we’ll connect automatically.'
+        : 'We couldn’t connect after 90 seconds. Select Try again and allow another minute. If it still won’t connect, please try again later.'}</span>
+    </span>
+    <button type="button" disabled={status === 'starting'} onClick={() => {
+      setStatus('starting');
+      setAttempt(value => value + 1);
+    }}>{status === 'starting' ? 'Connecting…' : 'Try again'}</button>
   </output>;
 }
