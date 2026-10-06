@@ -2,7 +2,7 @@ name: Frontend checks
 on:
   pull_request:
   push:
-    branches: [main, codex/vite-verification]
+    branches: [main]
 permissions:
   contents: read
 jobs:
@@ -31,6 +31,7 @@ jobs:
       - name: Check browser pages and API forwarding
         run: npm run test:smoke --prefix client
       - name: Export generated lockfile for the verified commit
+        if: always()
         run: |
           node --input-type=module <<'NODE'
           import { readFileSync } from 'node:fs';

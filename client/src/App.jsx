@@ -47,7 +47,7 @@ function App() {
     <ApolloProvider client={client}>
       <Router>
         <Header />
-        <Suspense fallback={<p role="status" className="text-center py-4">Loading page...</p>}>
+        <Suspense fallback={<output className="d-block text-center py-4">Loading page...</output>}>
         <Routes>
           <Route
             path="/login"
