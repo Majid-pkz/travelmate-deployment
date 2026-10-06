@@ -1,6 +1,6 @@
 import React from 'react';
 import { useState } from 'react'
-import { NavLink, Navigate, Link, useNavigate} from 'react-router-dom';
+import { NavLink, Link, useLocation } from 'react-router-dom';
 import Logo from '../../assets/logo.png';
 import MenuIcon from '@mui/icons-material/Menu';
 import './Header.css'
@@ -8,8 +8,9 @@ import './Header.css'
 import Auth from '../../utils/auth';
 
 const Header = () => {
-  const navigate  = useNavigate()
   const [showNavbar, setShowNavbar] = useState(false)
+  const { pathname } = useLocation();
+  const isProfilePage = pathname === '/my-profile' || pathname === '/create-profile';
 
   const handleShowNavbar = () => {
     setShowNavbar(!showNavbar)
@@ -17,9 +18,7 @@ const Header = () => {
   const logout = (event) => {
     event.preventDefault();
     Auth.logout();
-    navigate("/")
-    // or instead of useNavigate:
-    //window.location.href = "/";
+    window.location.assign('/');
   };
 
   return (
@@ -30,10 +29,17 @@ const Header = () => {
             <img src={Logo} height={150} alt="Logo" />
           </NavLink>
         </div>
-        <div className="menu-icon" onClick={handleShowNavbar}>
+        <button
+          type="button"
+          className="menu-icon"
+          onClick={handleShowNavbar}
+          aria-label={showNavbar ? 'Close navigation' : 'Open navigation'}
+          aria-expanded={showNavbar}
+          aria-controls="navigation-links"
+        >
           <MenuIcon />
-        </div>
-        <div className={`nav-elements  ${showNavbar && 'active'}`}>
+        </button>
+        <div id="navigation-links" className={`nav-elements  ${showNavbar && 'active'}`}>
           {Auth.loggedIn() ? (
             <ul>
               <li>
@@ -42,14 +48,20 @@ const Header = () => {
                 </NavLink>
               </li>
               <li>
-                <NavLink onClick={handleShowNavbar} to="/create-profile">
-                  {/* {Auth.getProfile().data.firstname}'s profile */}
+                <Link onClick={handleShowNavbar} to="/my-profile"
+                  className={isProfilePage ? 'active' : undefined}
+                  aria-current={isProfilePage ? 'page' : undefined}>
                   Profile
-                </NavLink>
+                </Link>
               </li>
               <li>
                 <NavLink to="/new-trip" onClick={handleShowNavbar}>
                   Start a New Trip
+                </NavLink>
+              </li>
+              <li>
+                <NavLink to="/my-upcoming-trips" onClick={handleShowNavbar}>
+                  My trips
                 </NavLink>
               </li>
               <li>
@@ -68,12 +80,12 @@ const Header = () => {
                 </li>
                 <li>
                   <NavLink className="login" onClick={handleShowNavbar} to="/login">
-                    Login
+                    Log in
                   </NavLink>
                 </li>
                 <li>
                   <NavLink className="signup" onClick={handleShowNavbar} to="/signup">
-                    Signup
+                    Sign up
                   </NavLink>
                 </li>
               </ul>

@@ -1,26 +1,34 @@
-import React from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import React, { lazy, Suspense } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { ApolloClient, ApolloProvider, InMemoryCache, createHttpLink, } from '@apollo/client';
 import { setContext } from '@apollo/client/link/context';
+import Auth from './utils/auth';
+import { apiUrl } from './utils/api.mjs';
+import ApiStatus from './components/ApiStatus';
 
 
 import Home from './pages/Home/Home';
-import Signup from './pages/Signup';
-import FileUpload from './pages/FileUpload'
-import RecipeReviewCard from './pages/TestCard'
-import Trip from './pages/Trip'
-import StartTrip from './pages/StartTrip'
+const Signup = lazy(() => import('./pages/Signup'));
+const FileUpload = lazy(() => import('./pages/FileUpload'));
+const RecipeReviewCard = lazy(() => import('./pages/TestCard'));
+const Trip = lazy(() => import('./pages/Trip'));
+const StartTrip = lazy(() => import('./pages/StartTrip'));
 import Header from './components/Header/Header';
 import Footer from './components/Footer/Footer';
-import LoginTest from './pages/Login';
-import MyUpcomingTrips from './pages/myUpcomingTrips';
-import Profile from './pages/createProfile'
-import PersonalProfile from './pages/displayProfile'
-import GroupExample from './pages/ProfileCards'
+const LoginTest = lazy(() => import('./pages/Login'));
+const MyUpcomingTrips = lazy(() => import('./pages/myUpcomingTrips'));
+const Profile = lazy(() => import('./pages/createProfile'));
+const PersonalProfile = lazy(() => import('./pages/displayProfile'));
+const GroupExample = lazy(() => import('./pages/ProfileCards'));
+const NotFound = lazy(() => import('./pages/NotFound'));
+
+function PrivatePage({ children }) {
+  return Auth.loggedIn() ? children : <Navigate to="/login" replace />;
+}
 
 // Construct our main GraphQL API endpoint
 const httpLink = createHttpLink({
-  uri: '/graphql',
+  uri: apiUrl('/graphql'),
 });
 
 // Construct request middleware that will attach the JWT token to every request as an `authorization` header
@@ -42,11 +50,18 @@ const client = new ApolloClient({
   cache: new InMemoryCache(),
 });
 
+function refreshLiveQueries() {
+  // Recover mounted reads after a cold start; never replay submitted mutations.
+  void client.refetchQueries({ include: 'active' }).catch(() => {});
+}
+
 function App() {
   return (
     <ApolloProvider client={client}>
       <Router>
         <Header />
+        <ApiStatus onReady={refreshLiveQueries} />
+        <Suspense fallback={<output className="d-block text-center py-4">Loading page...</output>}>
         <Routes>
           <Route
             path="/login"
@@ -67,7 +82,7 @@ function App() {
 
           <Route
             path="/new-trip"
-            element={< StartTrip />}
+            element={<PrivatePage><StartTrip /></PrivatePage>}
           />
           <Route
             path="/single"
@@ -76,16 +91,16 @@ function App() {
 
           <Route
             path="/upload"
-            element={<FileUpload />}
+            element={<PrivatePage><FileUpload /></PrivatePage>}
           />
 
           <Route
             path="/create-profile"
-            element={<Profile />}
+            element={<PrivatePage><Profile /></PrivatePage>}
           />
           <Route
             path="/my-profile"
-            element={<PersonalProfile />}
+            element={<PrivatePage><PersonalProfile /></PrivatePage>}
           />
           <Route
             path="/all-profiles"
@@ -94,14 +109,16 @@ function App() {
 
           <Route
             path="/my-upcoming-trips"
-            element={<MyUpcomingTrips />}
+            element={<PrivatePage><MyUpcomingTrips /></PrivatePage>}
           />
 
 
 
 
 
+          <Route path="*" element={<NotFound />} />
         </Routes>
+        </Suspense>
         {/* </div> */}
         <Footer />
         {/* </div> */}

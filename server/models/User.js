@@ -17,11 +17,21 @@ const userSchema = new Schema(
       type: String,
       required: true,
       unique: true,
+      trim: true,
+      lowercase: true,
       match: [/.+@.+\..+/, 'Must use a valid email address'],
   },
   password: {
       type: String,
       required: true,
+      select: false,
+      minlength: 8,
+      validate: (value) => Buffer.byteLength(value, 'utf8') <= 72,
+  },
+  tokenVersion: {
+    type: Number,
+    default: 0,
+    select: false,
   },
 
 
@@ -35,18 +45,23 @@ const userSchema = new Schema(
  
 );
 
+// Populate only the public photo when displaying a trip's organizer.
+userSchema.virtual('publicProfile', {
+  ref: 'Profile', localField: '_id', foreignField: 'profileUser', justOne: true,
+});
+
 // hash user password
-userSchema.pre('save', async function (next) {
+userSchema.pre('save', async function () {
   if (this.isNew || this.isModified('password')) {
     const saltRounds = 10;
     this.password = await bcrypt.hash(this.password, saltRounds);
   }
 
-  next();
 });
 
 // custom method to compare and validate password for logging in
 userSchema.methods.isCorrectPassword = async function (password) {
+  if (typeof password !== 'string' || Buffer.byteLength(password, 'utf8') > 72 || !this.password) return false;
   return bcrypt.compare(password, this.password);
 };
 

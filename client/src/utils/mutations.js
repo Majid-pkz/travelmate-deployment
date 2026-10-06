@@ -45,8 +45,8 @@ export const CREATE_USER = gql`
 // }
 
 export const CREATE_PROFILE = gql`
-mutation createProfile($profileUser: ID!, $location: String, $joinedDate: String, $gender: String, $age: Int, $bio: String, $interests: [ID], $image: String, $verified: Boolean, $subscribed: Boolean, $createdTrips: ID, $tripCount: Int) {
-  createProfile(profileUser: $profileUser, location: $location, joinedDate: $joinedDate, gender: $gender, age: $age, bio: $bio, interests: $interests, image: $image, verified: $verified, subscribed: $subscribed, createdTrips: $createdTrips, tripCount: $tripCount) {
+mutation createProfile($profileUser: ID!, $location: String, $gender: String, $age: Int, $bio: String, $interests: [ID]) {
+  createProfile(profileUser: $profileUser, location: $location, gender: $gender, age: $age, bio: $bio, interests: $interests) {
     _id
     profileUser {
       _id
@@ -93,7 +93,8 @@ export const CREATE_TRIP = gql`
       startDate: $startDate
       endDate: $endDate
     ) {
-      
+      _id
+      image
       title
       travelmates {
         email
@@ -114,7 +115,6 @@ mutation joinTrip($joinTripId: ID!, $userJoining: ID!) {
       firstname
       lastname
       email
-      password
       isAdmin
     }
     title
@@ -136,9 +136,19 @@ mutation joinTrip($joinTripId: ID!, $userJoining: ID!) {
       firstname
       lastname
       email
-      password
       isAdmin
     }
+  }
+}
+`;
+
+export const UPDATE_USER = gql`
+mutation UpdateUser($id: ID!, $firstname: String, $lastname: String, $email: String, $password: String, $currentPassword: String) {
+  updateUser(id: $id, firstname: $firstname, lastname: $lastname, email: $email, password: $password, currentPassword: $currentPassword) {
+    _id
+    firstname
+    lastname
+    email
   }
 }
 `;
@@ -150,11 +160,13 @@ mutation updateProfile($id: ID!, $location: String, $gender: String, $age: Int, 
     age
     bio
     createdTrips {
+      _id
       title
     }
     gender
     image
     interests {
+      _id
       label
     }
     location

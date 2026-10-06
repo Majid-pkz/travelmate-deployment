@@ -66,6 +66,10 @@ const tripSchema = new Schema({
   image: {
     type: String,
   },
+  imageData: {
+    type: Buffer,
+    select: false,
+  },
 });
 
 const Trip = model('Trip', tripSchema);

@@ -1,13 +1,10 @@
-const { gql } = require('apollo-server-express');
-
-const typeDefs = gql`
+const typeDefs = `
   # Define which fields are accessible from the  models
   type User {
     _id: ID!
     firstname: String!
     lastname: String!
-    email: String!
-    password: String!
+    email: String
     isAdmin: Boolean
    
   }
@@ -15,6 +12,7 @@ const typeDefs = gql`
   type Trip {
     _id: ID!
     creator: User!
+    creatorProfileImage: String
     title: String!
     description: String
     departureLocation: String!
@@ -63,26 +61,22 @@ const typeDefs = gql`
   
   
   type Mutation {
-    createUser( firstname: String!, lastname: String!, email: String!, password: String!,
-      isAdmin: Boolean): Auth
+    createUser(firstname: String!, lastname: String!, email: String!, password: String!): Auth
 
-    createProfile(profileUser:ID!, location: String, joinedDate: String, gender: String,
-        age: Int, bio: String, interests:[ID],image: String, verified: Boolean,
-        subscribed: Boolean, createdTrips:ID, tripCount: Int): Profile
+    createProfile(profileUser: ID!, location: String, gender: String,
+        age: Int, bio: String, interests: [ID]): Profile
 
     createTrip(creator: ID!, title: String!, description: String!,
        departureLocation: String!, destination: String!, startDate: String,
-        endDate: String, tripType: ID, meetupPoint: String, 
-        approvedTrip: Boolean, published: Boolean, image: String): Trip
+        endDate: String, tripType: ID, meetupPoint: String): Trip
 
     createTripType( tripType: String!): TripType
     createInterests( label: String!): Interest
 
-    updateUser(id: ID!, firstname: String, lastname: String, email: String, password: String): User
+    updateUser(id: ID!, firstname: String, lastname: String, email: String, password: String, currentPassword: String): User
 
     updateProfile(id: ID!, location: String, gender: String, age: Int, bio: String,
-      interests: [ID], image: String, verified: Boolean,
-      subscribed: Boolean): Profile
+      interests: [ID]): Profile
 
    
 
@@ -111,7 +105,6 @@ const typeDefs = gql`
     users: [User]
     trips: [Trip]
     profiles: [Profile]
-    usersAndItsTrip:[User]
     tripTypes:[TripType]
     interests:[Interest]
     # Define a query with an ID parameter to return a single of that  object

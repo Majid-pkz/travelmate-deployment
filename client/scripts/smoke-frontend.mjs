@@ -1,0 +1,305 @@
+import assert from 'node:assert/strict';
+import { spawn } from 'node:child_process';
+import { once } from 'node:events';
+import { createServer } from 'node:http';
+import { setTimeout as delay } from 'node:timers/promises';
+import { fileURLToPath } from 'node:url';
+import { chromium } from 'playwright';
+
+const base = 'http://127.0.0.1:3000';
+const clientRoot = fileURLToPath(new URL('../', import.meta.url));
+const viteEntry = fileURLToPath(new URL('../node_modules/vite/bin/vite.js', import.meta.url));
+const currentUser = '0123456789abcdef01234567';
+let smokeJoined = false;
+let healthAvailable = true;
+const apiBase = 'http://127.0.0.1:3001';
+const longDescription = 'Meet in Sydney for a relaxed weekend in the Blue Mountains. We will walk the forest trails, share lunch, and stop at scenic lookouts. Bring comfortable shoes, water, and your favourite snacks.';
+function stateTrips() {
+  const baseTrip = {
+    __typename: 'Trip', description: longDescription, departureLocation: 'Sydney',
+    destination: 'Blue Mountains', startDate: '2026-10-10T00:00:00.000Z', endDate: '2026-10-12T00:00:00.000Z',
+    image: null, meetupPoint: 'Central Station', creatorProfileImage: '/api/images/profile/smoke',
+    creator: { __typename: 'User', _id: 'other-user', firstname: 'Maya', lastname: 'Traveller', email: null },
+  };
+  return [
+    { ...baseTrip, _id: 'own-trip', title: 'Your weekend getaway', creatorProfileImage: '/api/images/profile/missing',
+      creator: { __typename: 'User', _id: currentUser, firstname: 'Sam', lastname: 'Traveller', email: 'sam@example.com' },
+      travelmates: [{ __typename: 'User', _id: currentUser, firstname: 'Sam' }] },
+    { ...baseTrip, _id: 'joined-trip', title: 'A much longer trip title that should wrap neatly onto two lines',
+      travelmates: [{ __typename: 'User', _id: currentUser, firstname: 'Sam' }] },
+    { ...baseTrip, _id: 'open-trip', title: 'Mountain trails', description: 'A short description.',
+      travelmates: smokeJoined ? [{ __typename: 'User', _id: currentUser, firstname: 'Sam' }] : [] },
+  ];
+}
+const api = createServer(async (request, response) => {
+  if (request.headers.origin === base) response.setHeader('Access-Control-Allow-Origin', base);
+  if (request.method === 'OPTIONS') {
+    response.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    response.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type');
+    response.writeHead(204).end();
+    return;
+  }
+  let body = '';
+  for await (const chunk of request) body += chunk;
+  if (request.url === '/api/images/profile/smoke') {
+    response.setHeader('Content-Type', 'image/png');
+    response.end(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAACXBIWXMAAAPoAAAD6AG1e1JrAAAAGElEQVQokWMwiPUgCTGMaogdDSWD4Zo0ACYq1QHqHzv3AAAAAElFTkSuQmCC', 'base64'));
+    return;
+  }
+  if (request.url === '/api/images/profile/missing') { response.writeHead(404).end(); return; }
+  response.setHeader('Content-Type', 'application/json');
+  if (request.url === '/graphql' && !healthAvailable) {
+    response.writeHead(503).end(JSON.stringify({ error: 'The test API is waking.' }));
+    return;
+  }
+  if (request.url === '/api/health' && !request.headers.authorization) {
+    response.statusCode = healthAvailable ? 200 : 503;
+    response.end(JSON.stringify({ status: healthAvailable ? 'ok' : 'unavailable' }));
+  } else if (request.url === '/graphql' && body.includes('joinTrip')) {
+    smokeJoined = true;
+    response.end(JSON.stringify({ data: { joinTrip: stateTrips()[2] } }));
+  } else if (request.url.startsWith('/api/locations')) {
+    const term = new URL(request.url, base).searchParams.get('q');
+    if (term === 'Offline') { response.statusCode = 503; response.end(JSON.stringify({ locations: [] })); }
+    else response.end(JSON.stringify({ locations: term?.toLowerCase().startsWith('syd') ? [
+      { id: '2147714', name: 'Sydney', region: 'New South Wales', country: 'Australia' },
+      { id: '6354908', name: 'Sydney', region: 'Nova Scotia', country: 'Canada' },
+    ] : [{ id: '1850147', name: 'Tokyo', region: 'Tokyo', country: 'Japan' }] }));
+  } else if (request.url === '/graphql') {
+    response.end(JSON.stringify({
+      data: body.includes('searchTrips') ? {
+        searchTrips: body.includes('NoMatches') ? [] : body.includes('States') ? stateTrips() : [{
+          __typename: 'Trip', _id: 'smoke-trip', title: 'Sydney road trip',
+          description: 'A trip used only by the frontend smoke test.',
+          departureLocation: 'Sydney', destination: 'Blue Mountains',
+          startDate: '2026-10-10T00:00:00.000Z', endDate: '2026-10-12T00:00:00.000Z',
+          creator: {
+            __typename: 'User', _id: 'smoke-user', firstname: 'Test',
+            lastname: 'Traveller', email: 'test@example.com',
+          },
+          creatorProfileImage: null, meetupPoint: null, travelmates: [],
+          image: body.includes('BrokenPhoto') ? '/api/images/trips/missing' : null,
+        }],
+      } : { __typename: 'Query' },
+    }));
+  } else {
+    response.end(JSON.stringify({
+      path: request.url,
+      method: request.method,
+      authorization: request.headers.authorization ?? null,
+    }));
+  }
+});
+
+async function waitForFrontend(child) {
+  for (let attempt = 0; attempt < 60; attempt += 1) {
+    if (child.exitCode !== null) throw new Error('Frontend exited before startup');
+    try {
+      const response = await fetch(base);
+      if (response.ok) return;
+    } catch {
+      // Allow the development server to finish starting.
+    }
+    await delay(200);
+  }
+  throw new Error('Frontend did not start on port 3000');
+}
+
+async function checkFrontend(browser, mode) {
+  const child = spawn(process.execPath, [viteEntry, ...(mode !== 'development' ? ['preview'] : []), '--host', '127.0.0.1'], {
+    cwd: clientRoot,
+    stdio: 'inherit',
+  });
+  let context;
+  try {
+    await waitForFrontend(child);
+    for (const path of ['/', '/login']) {
+      const response = await fetch(base + path);
+      assert.equal(response.status, 200);
+      assert.match(await response.text(), /id="root"/);
+    }
+    const graphql = await fetch(base + '/graphql', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query: '{ __typename }' }),
+    });
+    assert.deepEqual(await graphql.json(), { data: { __typename: 'Query' } });
+    for (const path of ['/api/health', '/images/smoke.png']) {
+      const response = await fetch(base + path, {
+        headers: { authorization: 'Bearer smoke-test-token' },
+      });
+      assert.deepEqual(await response.json(), {
+        path, method: 'GET', authorization: 'Bearer smoke-test-token',
+      });
+    }
+
+    context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+    const page = await context.newPage();
+    const errors = [];
+    page.on('pageerror', error => errors.push(error.message));
+    await page.route('**/*', route => [base, ...(mode === 'split' ? [apiBase] : [])].some(origin => route.request().url().startsWith(origin + '/'))
+      ? route.continue() : route.abort());
+
+    await page.goto(base, { waitUntil: 'domcontentloaded' });
+    await page.getByRole('heading', { name: /Welcome to Travelmate/i }).waitFor();
+    const cityToken = 'e30.' + Buffer.from(JSON.stringify({ data: { _id: currentUser }, exp: Math.floor(Date.now() / 1000) + 3600 })).toString('base64url') + '.smoke';
+    await page.evaluate(value => localStorage.setItem('id_token', value), cityToken);
+    await page.goto(base);
+    const city = page.getByRole('combobox', { name: 'Departure location', exact: true });
+    await city.fill('syd');
+    await page.getByRole('option', { name: /Sydney.*Australia/ }).waitFor();
+    await city.press('ArrowDown');
+    await city.press('Enter');
+    assert.equal(await city.inputValue(), 'Sydney');
+    assert.equal(page.url(), base + '/', 'Selecting a city must not submit the search');
+    await city.press('Enter');
+    await page.waitForURL(base + '/trips?search=Sydney');
+    await page.getByRole('heading', { name: 'Sydney road trip', exact: true }).waitFor();
+    await page.goto(base);
+    await city.fill('tok');
+    await page.getByRole('option', { name: /Tokyo.*Japan/ }).click();
+    assert.equal(await city.inputValue(), 'Tokyo');
+    await city.fill('Offline');
+    await page.getByText('Suggestions are unavailable. You can still enter a location.', { exact: true }).waitFor();
+    await city.press('Enter');
+    await page.waitForURL(base + '/trips?search=Offline');
+    await page.evaluate(() => localStorage.removeItem('id_token'));
+    await page.goto(base);
+    await page.getByRole('heading', { name: /Welcome to Travelmate/i }).waitFor();
+    const slide = page.getByRole('button', { name: 'Show slide 2' });
+    await slide.focus();
+    await slide.press('Enter');
+    await page.waitForFunction(() =>
+      document.querySelector('[aria-label="Show slide 2"]').getAttribute('aria-pressed') === 'true');
+    await page.setViewportSize({ width: 390, height: 844 });
+    const menu = page.getByRole('button', { name: 'Open navigation' });
+    await menu.focus();
+    await menu.press('Enter');
+    await page.waitForFunction(() =>
+      document.querySelector('.menu-icon').getAttribute('aria-expanded') === 'true');
+    await page.setViewportSize({ width: 1280, height: 800 });
+
+    for (const path of ['/login', '/signup']) {
+      await page.goto(base + path, { waitUntil: 'domcontentloaded' });
+      await page.locator('input[name="email"]').waitFor();
+      assert.equal(await page.locator('input[name="email"]').isVisible(), true);
+    }
+    for (const path of ['/new-trip', '/upload', '/create-profile', '/my-profile', '/my-upcoming-trips']) {
+      await page.goto(base + path, { waitUntil: 'domcontentloaded' });
+      await page.waitForURL(base + '/login');
+      await page.locator('input[name="email"]').waitFor();
+    }
+    const expiredToken = 'e30.' + Buffer.from(JSON.stringify({
+      data: { _id: '0123456789abcdef01234567' }, exp: 1,
+    })).toString('base64url') + '.invalid';
+    for (const token of ['malformed-token', expiredToken]) {
+      await page.evaluate(value => localStorage.setItem('id_token', value), token);
+      await page.goto(base + '/my-profile', { waitUntil: 'domcontentloaded' });
+      await page.waitForURL(base + '/login');
+      await page.locator('input[name="email"]').waitFor();
+      assert.equal(await page.evaluate(() => localStorage.getItem('id_token')), null);
+    }
+    await page.goto(base + '/missing-page', { waitUntil: 'domcontentloaded' });
+    await page.getByRole('heading', { name: 'No match for /missing-page' }).waitFor();
+    await page.goto(base + '/trips?search=Sydney', { waitUntil: 'domcontentloaded' });
+    await page.getByRole('heading', { name: 'Sydney road trip', exact: true }).waitFor();
+    await page.waitForFunction(() => document.querySelector('img[alt="Sydney road trip"]')?.naturalWidth > 0);
+    assert.match(await page.getByRole('img', { name: 'Sydney road trip', exact: true }).getAttribute('src'), /oceanView/);
+    await page.getByRole('button', { name: 'Join Trip' }).click();
+    await page.getByText('Log in to join this trip.').waitFor();
+    await page.goto(base + '/trips?search=BrokenPhoto', { waitUntil: 'domcontentloaded' });
+    await page.waitForFunction(() => {
+      const image = document.querySelector('img[alt="Sydney road trip"]');
+      return image?.naturalWidth > 0 && image.getAttribute('src').includes('oceanView');
+    });
+    await page.goto(base + '/trips?search=NoMatches', { waitUntil: 'domcontentloaded' });
+    await page.getByText('No trips found. Try Again!').waitFor();
+    smokeJoined = false;
+    const token = 'e30.' + Buffer.from(JSON.stringify({ data: { _id: currentUser }, exp: Math.floor(Date.now() / 1000) + 3600 })).toString('base64url') + '.smoke';
+    await page.evaluate(value => localStorage.setItem('id_token', value), token);
+    await page.goto(base + '/trips?search=States', { waitUntil: 'domcontentloaded' });
+    const owned = page.getByRole('article', { name: 'Your weekend getaway', exact: true });
+    const joined = page.getByRole('article', { name: 'A much longer trip title that should wrap neatly onto two lines', exact: true });
+    const open = page.getByRole('article', { name: 'Mountain trails', exact: true });
+    await owned.getByText('Organizing', { exact: true }).waitFor();
+    await joined.getByText('Joined', { exact: true }).waitFor();
+    await open.getByText('Open trip', { exact: true }).waitFor();
+    assert.equal(await owned.getByRole('button', { name: 'Join Trip' }).count(), 0);
+    assert.equal(await joined.getByRole('button', { name: 'Join Trip' }).count(), 0);
+    await owned.locator('.trip-card__avatar').getByText('ST', { exact: true }).waitFor();
+    await page.waitForFunction(() => [...document.querySelectorAll('.trip-card__avatar img')].every(image => image.naturalWidth > 0));
+    const heights = await page.locator('.trip-card').evaluateAll(cards => cards.map(card => card.getBoundingClientRect().height));
+    assert.ok(Math.max(...heights) - Math.min(...heights) < 1, 'Owned, joined and open cards must have equal collapsed heights');
+    const beforeJoin = (await open.boundingBox()).height;
+    await open.getByRole('button', { name: 'Join Trip', exact: true }).click();
+    await open.getByText('Joined', { exact: true }).waitFor();
+    assert.ok(Math.abs((await open.boundingBox()).height - beforeJoin) < 1, 'Joining must not grow the card');
+    await owned.locator('summary').focus();
+    await owned.locator('summary').press('Enter');
+    await owned.locator('.trip-card__detail-content').getByText(longDescription, { exact: true }).waitFor();
+    await owned.getByText('Central Station', { exact: false }).waitFor();
+    await owned.locator('summary').press('Enter');
+    await page.setViewportSize({ width: 390, height: 844 });
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), 'Trip cards must fit a mobile screen');
+    for (const card of [owned, joined, open]) assert.ok((await card.boundingBox()).width <= 358);
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.reload();
+    await open.getByText('Joined', { exact: true }).waitFor();
+    if (mode === 'split') {
+      assert.equal(new URL(await joined.locator('.trip-card__avatar img').getAttribute('src')).origin, apiBase);
+      healthAvailable = false;
+      await page.goto(base + '/trips?search=Sydney');
+      await page.getByText('TravelMate is waking up.', { exact: true }).waitFor();
+      await page.getByText('Keep this page open; we’ll connect automatically.', { exact: false }).waitFor();
+      assert.equal(await page.locator('header').isVisible(), true, 'Static navigation must remain usable while the API wakes');
+      assert.equal(await page.getByRole('button', { name: 'Connecting…', exact: true }).isDisabled(), true);
+      await page.setViewportSize({ width: 390, height: 844 });
+      assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), 'Startup guidance must fit a mobile screen');
+      await page.clock.install();
+      await page.clock.fastForward(95_000);
+      await page.getByRole('button', { name: 'Try again', exact: true }).waitFor();
+      await page.getByText('We couldn’t connect after 90 seconds.', { exact: false }).waitFor();
+      let finishRetry;
+      const retryWait = new Promise(resolve => { finishRetry = resolve; });
+      await page.route(apiBase + '/api/health', async route => { await retryWait; await route.continue(); });
+      healthAvailable = true;
+      await page.getByRole('button', { name: 'Try again', exact: true }).click();
+      await page.getByRole('button', { name: 'Connecting…', exact: true }).waitFor();
+      assert.equal(await page.getByRole('button', { name: 'Connecting…', exact: true }).isDisabled(), true, 'Retry acknowledges the click immediately and prevents duplicate attempts');
+      await page.getByText('TravelMate is waking up.', { exact: true }).waitFor();
+      finishRetry();
+      await page.waitForFunction(() => !document.querySelector('.api-status'));
+      await page.unroute(apiBase + '/api/health');
+      await page.getByRole('heading', { name: 'Sydney road trip', exact: true }).waitFor();
+      console.log('Separate frontend/API origins, saved photos, clear mobile startup guidance, bounded failure, immediate retry feedback and failed-read recovery passed');
+    }
+    assert.deepEqual(errors, [], 'Pages should render without JavaScript errors');
+    console.log(mode + ': page rendering, trip membership states, equal card heights, avatar fallbacks, global city selection, Enter search, provider fallback, keyboard details, mobile layout, private routes and proxies passed');
+  } catch (failure) {
+    const page = context?.pages()[0];
+    if (page) console.log('Browser failure context:', JSON.stringify({ url: page.url(), text: await page.locator('body').innerText() }));
+    throw failure;
+  } finally {
+    if (context) await context.close();
+    if (child.exitCode === null) {
+      const exited = once(child, 'exit');
+      child.kill('SIGTERM');
+      await exited;
+    }
+  }
+}
+
+await new Promise(resolve => api.listen(3001, '127.0.0.1', resolve));
+let browser;
+try {
+  browser = await chromium.launch();
+  await checkFrontend(browser, 'development');
+  await checkFrontend(browser, 'preview');
+  const build = spawn(process.execPath, [viteEntry, 'build'], { cwd: clientRoot, env: { ...process.env, VITE_API_URL: apiBase }, stdio: 'inherit' });
+  const [code] = await once(build, 'exit');
+  assert.equal(code, 0, 'The separate-host build must succeed');
+  await checkFrontend(browser, 'split');
+} finally {
+  if (browser) await browser.close();
+  await new Promise(resolve => api.close(resolve));
+}

@@ -1,343 +1,260 @@
-const { Trip, User, TripType, Profile, Interest } = require("../models");
- const {AuthenticationError, ApolloError} = require('apollo-server-express');
- const { signToken } = require('../utils/auth');
+const { Trip, User, TripType, Profile, Interest } = require('../models');
+const { signToken } = require('../utils/auth');
+const access = require('../utils/access');
+
+const tripPopulation = [
+  { path: 'creator', populate: { path: 'publicProfile', select: 'image profileUser' } },
+  { path: 'tripType' },
+  { path: 'travelmates' },
+];
+const profilePopulation = [
+  { path: 'profileUser' },
+  { path: 'interests' },
+  { path: 'createdTrips', populate: tripPopulation },
+];
+
+async function profileFields(params) {
+  const fields = {};
+  for (const [key, maximum] of [['location', 120], ['gender', 30], ['bio', 2000]]) {
+    if (params[key] !== undefined) fields[key] = access.text(params[key], key, maximum);
+  }
+  if (params.age !== undefined) {
+    if (params.age !== null && (!Number.isInteger(params.age) || params.age < 0 || params.age > 120)) {
+      access.fail('Age must be between 0 and 120.');
+    }
+    fields.age = params.age;
+  }
+  if (params.interests !== undefined) {
+    const ids = [...new Set((params.interests ?? []).map(access.id))];
+    if (ids.length > 20 || await Interest.countDocuments({ _id: { $in: ids } }) !== ids.length) {
+      access.fail('Choose interests from the available list.');
+    }
+    fields.interests = ids;
+  }
+  return fields;
+}
+
+async function ownProfile(context, profileId, change) {
+  const user = await access.actor(context);
+  const profile = await Profile.findOneAndUpdate(
+    { _id: access.id(profileId), profileUser: user._id },
+    change, { new: true, runValidators: true },
+  ).populate(profilePopulation);
+  return access.notFound(profile, 'Profile');
+}
 
 const resolvers = {
-  Query: {
-    users:  async () => {
-      const users = await User.find({})     
-      return users;
-    }, 
-
-    // Define a resolver to retrieve individual user
-    user: async (parent, args) => {
-      // Use the parameter to find the matching user in the collection
-     let user = await User.findById(args.id);
-    
-     if(!user){
-      throw new ApolloError ('user does not exist')
-
-     }
-     return user     
+  User: {
+    email: async (user, args, context) => {
+      if (context?.authenticatedUserIds?.has(String(user._id))) return user.email;
+      if (!context?.user) return null;
+      const current = await access.actor(context);
+      if (current.isAdmin || String(current._id) === String(user._id)) return user.email;
+      // Contact details are shared only by people on the same trip.
+      const shared = await Trip.exists({ $and: [
+        { $or: [{ creator: current._id }, { travelmates: current._id }] },
+        { $or: [{ creator: user._id }, { travelmates: user._id }] },
+      ] });
+      return shared ? user.email : null;
     },
-
-
-  
-    profiles:  async () => {
-      const profiles = await Profile.find({}).populate('createdTrips').populate({
-          path: 'createdTrips',
-          populate: 'creator tripType'
-        }).populate('profileUser').populate('interests');   
-      return profiles;
-    }, 
-
-    // me: async (parent, args, context) => {
-    //   console.log('00000000000000000000000000000000000000000000000------------------------',context)
-    //   console.log('------------------------this is context.user',context.user)
-      
-    //   if (context.user) {
-    //     const profiles = await Profile.findOne({profileUser:context.user._id  }).populate('createdTrips').populate({
-    //       path: 'createdTrips',
-    //       populate: 'creator tripType'
-    //     }).populate('profileUser').populate('interests');   
-    //   return profiles;
-    //   }
-    //   throw new AuthenticationError('You need to be logged in!');
-    // },
-
- 
-  
-    profile: async (parent, args) => {
-      // Use the parameter to find the matching user in the collection
-      console.log(args)
-     let profile = await Profile.findOne({profileUser: args.id}).populate('profileUser').populate('interests').
-     populate('createdTrips');
-    
-     if(!profile){
-      throw new ApolloError ('profile does not exist')
-
-     }
-     return profile     
-    },
-
-    profileExist: async (parent, args, context) => {
-      if (context.user) {
-        console.log('This is context.user when creating a profile',context.user_id)
-      const isProfileExist = await Profile.findOne({profileUser:context.user._id  })
-      if(isProfileExist){
-      return isProfileExist
-      } else {
-        throw new ApolloError('Profile does not exist')
-      }
-    }
-    throw new AuthenticationError('You need to be logged in!');
-    },
-
-    
-    myTrips: async (parent, args, context)=> {
-      // console.log('This is context-------------------------------------------- when myTrip',context.user)
-      
-      // console.log('This is context.user when myTrip',context.user._id)
-        const trips = await Trip.find({travelmates:context.user._id}).populate('creator').populate('tripType').populate('travelmates');     
-        return trips
-      },
-      
-   trips: async () => {
-      const trips = await Trip.find({}).populate('creator').populate('tripType').populate('travelmates');     
-      return trips;
-    },
-
-    // searchTrips: async (parent, {departureLocation}) => {
-    //   const trips = await Trip.find({departureLocation}).populate('creator').populate('tripType').populate('travelmates');
-    //   return trips;
-    // },
-
-    // searchTrips: async (parent, { departureLocation }) => {
-    //   const trips = await Trip.find({ departureLocation: { $regex: new RegExp(`^${departureLocation}$`, 'i') } })
-    //     .populate('creator')
-    //     .populate('tripType')
-    //     .populate('travelmates');
-    //   return trips;
-    // },
-    searchTrips: async (parent, { departureLocation }) => {
-      const searchQuery = new RegExp(departureLocation, 'i'); // 'i' flag for case-insensitive search
-    
-      const trips = await Trip.find({ departureLocation: { $regex: searchQuery } })
-        .populate('creator')
-        .populate('tripType')
-        .populate('travelmates');
-    
-      return trips;
-    },
-
-    // Define a resolver to retrieve single trip
-    trip: async (parent, args) => {
-      // Use the parameter to find the matching trip in the collection
-      return await Trip.findById(args.id).populate("creator").populate('tripType').populate('travelmates');
-    },
-
-    tripTypes: async () => {
-      return await TripType.find({});
-    },
-    tripType: async (parent, args) => {
-      // Use the parameter to find the matching tripType in the collection
-      return await TripType.findById(args.id);
-    },
-
-
-    interests:  async () => {
-      const inter = await Interest.find({})     
-      return inter;
-    }, 
-
-  
-    interest: async (parent, args) => {
-     
-     let inter = await Interest.findById(args.id);
-    
-     if(!inter){
-      throw new ApolloError ('user does not exist')
-
-     }
-     return inter     
-    },
-
+    isAdmin: (user, args, context) =>
+      context?.user?._id === String(user._id) ? user.isAdmin : null,
   },
-  
-
+  Profile: {
+    createdTrips: (profile) => (profile.createdTrips ?? []).filter(Boolean),
+    tripCount: (profile) => (profile.createdTrips ?? []).filter(Boolean).length,
+    interests: (profile) => (profile.interests ?? []).filter(Boolean),
+    joinedDate: (profile) => profile.joinedDate ? new Date(profile.joinedDate).toISOString() : null,
+  },
+  Trip: {
+    creatorProfileImage: (trip) => trip.creator?.publicProfile?.image ?? null,
+    // Older records may contain the organizer as a member. Display them only as organizer.
+    travelmates: (trip) => (trip.travelmates ?? []).filter(user => user && String(user._id) !== String(trip.creator?._id)),
+  },
+  Query: {
+    users: async (parent, args, context) => {
+      await access.admin(context);
+      return User.find({}).limit(100);
+    },
+    user: async (parent, { id }) => User.findById(access.id(id)),
+    profiles: async () => Profile.find({}).limit(50).populate(profilePopulation),
+    profile: async (parent, { id }) => Profile.findOne({ profileUser: access.id(id) }).populate(profilePopulation),
+    profileExist: async (parent, { profileUser }, context) => {
+      const user = await access.self(context, profileUser);
+      return Profile.findOne({ profileUser: user._id });
+    },
+    myTrips: async (parent, { travelmates }, context) => {
+      const user = await access.self(context, travelmates);
+      const trips = await Trip.find({ $or: [{ creator: user._id }, { travelmates: user._id }] })
+        .limit(100).populate(tripPopulation);
+      return trips.filter(trip => trip.creator);
+    },
+    trips: async () => {
+      const trips = await Trip.find({}).limit(50).populate(tripPopulation);
+      return trips.filter(trip => trip.creator);
+    },
+    searchTrips: async (parent, { departureLocation }) => {
+      const term = access.text(departureLocation ?? '', 'departure location', 120);
+      const escaped = term.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&');
+      const trips = await Trip.find({ departureLocation: { $regex: escaped, $options: 'i' } })
+        .limit(50).populate(tripPopulation);
+      return trips.filter(trip => trip.creator);
+    },
+    trip: async (parent, { id }) => {
+      const trip = await Trip.findById(access.id(id)).populate(tripPopulation);
+      return trip?.creator ? trip : null;
+    },
+    tripTypes: async () => TripType.find({}).limit(100),
+    tripType: async (parent, { id }) => TripType.findById(access.id(id)),
+    interests: async () => Interest.find({}).limit(100),
+    interest: async (parent, { id }) => Interest.findById(access.id(id)),
+  },
   Mutation: {
-
-
-
-    login: async (parent, { email, password }) => {
-      const user = await User.findOne({ email });
-
-      if (!user) {
-        throw new AuthenticationError('No user found with this email address');
+    login: async (parent, { email, password }, context) => {
+      const user = await User.findOne({ email: access.email(email) }).select('+password +tokenVersion');
+      if (!user || !await user.isCorrectPassword(password)) {
+        access.fail('Incorrect email or password.', 'UNAUTHENTICATED');
       }
-
-      const correctPw = await user.isCorrectPassword(password);
-
-      if (!correctPw) {
-        throw new AuthenticationError('Incorrect credentials');
-      }
-
-      const token = signToken(user);
-
-      return { token, user };
+      context.authenticatedUserIds ??= new Set();
+      context.authenticatedUserIds.add(String(user._id));
+      return { token: signToken(user), user };
     },
-
-
-
-
-
-
-    //destructure
-    createUser: async (parent, {  firstname, lastname, email, password, isAdmin }) => {
-      const user = await User.create({ firstname, lastname, email, password,isAdmin });
-      const token = signToken(user);
-      return { token, user };
-
+    createUser: async (parent, params, context) => {
+      const user = await User.create({
+        firstname: access.text(params.firstname, 'first name', 50, true),
+        lastname: access.text(params.lastname, 'last name', 50, true),
+        email: access.email(params.email),
+        password: access.password(params.password),
+        isAdmin: false,
+      });
+      context.authenticatedUserIds ??= new Set();
+      context.authenticatedUserIds.add(String(user._id));
+      return { token: signToken(user), user };
     },
-
-    createProfile: async(parent,params,context)=>{
-      console.log('This is context.user when creating a profile');
-      if (context.user) {
-        console.log('This is context.user when creating a profile',context.user_id)
-      const isProfileExist = await Profile.findOne({profileUser:context.user._id  })
-      if(!isProfileExist){
-      return (await Profile.create(params)).populate('profileUser interests')
-      } else {
-        throw new ApolloError('Profile already exists')
-      }
-    }
-    throw new AuthenticationError('You need to be logged in!');
+    createProfile: async (parent, params, context) => {
+      const user = await access.self(context, params.profileUser);
+      if (await Profile.exists({ profileUser: user._id })) access.fail('You already have a profile.');
+      const profile = await Profile.create({
+        ...await profileFields(params),
+        profileUser: user._id,
+        joinedDate: new Date(),
+        verified: false,
+      });
+      return profile.populate(profilePopulation);
     },
-
-    
-
-    createTripType: async (parent, tripType) => {
-      return await TripType.create(tripType);
-    },
-
-
-    createInterests: async (parent, interests) => {
-      return await Interest.create(interests);
-    },
-
     createTrip: async (parent, params, context) => {
-      //  const {creator, title, description, departureLocation, destination, tripType} = params
-
-      // this await await does not seems to be correct but working  needs review
-      if (context.user) {
-      let trip = await  Trip.create(params);
-     console.log('--------------params:  ',params)
-     console.log('--------------trip._id:  ',trip._id)
-     console.log('--------------trip.id:  ',trip.id)
-     console.log('--------params.creator:   ',params.creator)
-     console.log('This is context.user when creating a trip',context.user)
-     await Profile.findOneAndUpdate(
-        { profileUser: context.user._id},
-        { $addToSet: { createdTrips: trip.id } },
-        {new:true}
-      );
-      // trip =  await Trip.findById(trip._id).populate('creator').populate('tripType')
-      trip =  await trip.populate('creator tripType travelmates')
-      
+      const user = await access.self(context, params.creator);
+      const profile = access.notFound(await Profile.findOne({ profileUser: user._id }), 'Profile');
+      const startDate = access.date(params.startDate, 'start date');
+      const endDate = access.date(params.endDate, 'end date');
+      if (endDate < startDate) access.fail('End date must be on or after the start date.');
+      const tripType = params.tripType ? access.id(params.tripType) : null;
+      if (tripType && !await TripType.exists({ _id: tripType })) access.fail('Choose an available trip type.');
+      const trip = await Trip.create({
+        creator: user._id,
+        title: access.text(params.title, 'title', 120, true),
+        description: access.text(params.description, 'description', 3000, true),
+        departureLocation: access.text(params.departureLocation, 'departure location', 120, true),
+        destination: access.text(params.destination, 'destination', 120, true),
+        meetupPoint: access.text(params.meetupPoint, 'meetup point', 200),
+        startDate, endDate, tripType, approvedTrip: false, published: true,
+      });
+      try {
+        await Profile.updateOne({ _id: profile._id, profileUser: user._id }, { $addToSet: { createdTrips: trip._id } });
+      } catch (error) {
+        await Trip.deleteOne({ _id: trip._id, creator: user._id });
+        throw error;
+      }
+      return trip.populate(tripPopulation);
+    },
+    createTripType: async (parent, { tripType }, context) => {
+      await access.admin(context);
+      return TripType.create({ tripType: access.text(tripType, 'trip type', 80, true) });
+    },
+    createInterests: async (parent, { label }, context) => {
+      await access.admin(context);
+      return Interest.create({ label: [access.text(label, 'interest', 80, true)] });
+    },
+    updateUser: async (parent, params, context) => {
+      const current = await access.self(context, params.id);
+      const user = access.notFound(await User.findById(current._id).select('+password +tokenVersion'), 'Account');
+      const email = params.email === undefined ? user.email : access.email(params.email);
+      if (email !== user.email || params.password !== undefined) {
+        if (!await user.isCorrectPassword(params.currentPassword)) access.fail('Your current password is incorrect.');
+      }
+      if (email !== user.email && await User.exists({ email, _id: { $ne: user._id } })) {
+        access.fail('An account already uses that email address.');
+      }
+      if (params.firstname !== undefined) user.firstname = access.text(params.firstname, 'first name', 50, true);
+      if (params.lastname !== undefined) user.lastname = access.text(params.lastname, 'last name', 50, true);
+      user.email = email;
+      if (params.password !== undefined) {
+        user.password = access.password(params.password);
+        user.tokenVersion += 1;
+      }
+      await user.save();
+      return user;
+    },
+    updateProfile: async (parent, params, context) => {
+      // This endpoint's id is the account ID, matching the existing profile form.
+      const user = await access.self(context, params.id);
+      const profile = await Profile.findOneAndUpdate(
+        { profileUser: user._id }, { $set: await profileFields(params) },
+        { new: true, runValidators: true },
+      ).populate(profilePopulation);
+      return access.notFound(profile, 'Profile');
+    },
+    removeTrip: async (parent, { id }, context) => {
+      const user = await access.actor(context);
+      const trip = await Trip.findOneAndDelete({ _id: access.id(id), creator: user._id }).populate(tripPopulation);
+      access.notFound(trip, 'Trip');
+      await Profile.updateMany({ createdTrips: trip._id }, { $pull: { createdTrips: trip._id } });
       return trip;
-
-     }
-     throw new AuthenticationError('You need to be logged in!');
     },
-
-
-
-    updateUser: async (parent, { id, firstname, lastname, email, password }, context) => {
-      // Find and update
-         if (context.user) {
-      return await User.findOneAndUpdate(
-        { _id: id },
-        { firstname, lastname, email, password },
-        // Return the newly updated object instead of the original
-        { new: true }
-      );
-      }
-
-      throw new AuthenticationError('You need to be logged in!');
+    joinTrip: async (parent, { id, userJoining }, context) => {
+      const user = await access.self(context, userJoining);
+      const tripId = access.id(id);
+      const existing = access.notFound(await Trip.findById(tripId).select('creator'), 'Trip');
+      if (String(existing.creator) === String(user._id)) access.fail("You're already organizing this trip.", 'FORBIDDEN');
+      if (!await Profile.exists({ profileUser: user._id })) access.fail('Create your profile before joining a trip.');
+      const trip = await Trip.findOneAndUpdate(
+        { _id: tripId, creator: { $ne: user._id } }, { $addToSet: { travelmates: user._id } }, { new: true },
+      ).populate(tripPopulation);
+      return access.notFound(trip, 'Trip');
     },
- 
-
-    updateProfile:async (parent, params, context) => {
-      if (context.user) {  
-        console.log(context.user)
-      console.log(params.id)
-      return await Profile.findOneAndUpdate(
-        { profileUser: context.user._id },
-        params,
-        { new: true }
-      ).populate('profileUser interests createdTrips');
-      }
-      throw new AuthenticationError('You need to be logged in!');
+    deleteProfile: async (parent, { id }, context) => {
+      const user = await access.actor(context);
+      if (await Trip.exists({ creator: user._id })) access.fail('Remove your created trips before deleting your profile.');
+      const profile = await Profile.findOneAndDelete({ _id: access.id(id), profileUser: user._id });
+      return access.notFound(profile, 'Profile');
     },
-
-
-
-
-
-        removeTrip: async (parent, { id }, context) => {
-          if (context.user) {
-
-      return await Trip.findOneAndDelete({ _id: id });
-          }
-      throw new AuthenticationError('You need to be logged in!');
-    },
-
-    joinTrip: async (parent, { id,userJoining }, context) => {
-
-      if (context.user) {
-   
-    let userData= await  Trip.findOneAndUpdate(
-      { _id: id },
-      { $addToSet: { travelmates: userJoining } },
-      {new:true}); 
-      userData = await userData.populate('creator travelmates tripType')   
- 
-       return  userData
-       }
-
-      throw new AuthenticationError('You need to be logged in!');
-    },
-    
-
-   
-
-   // delete a user and consequently delete its profile 
     deleteUser: async (parent, { id }, context) => {
-      if (context.user) {
-      
-      let userData = await User.findOneAndDelete({ _id: id })
-      let profilData = await Profile.findOneAndDelete({profileUser:id})
-      return await userData;
-       }
-    throw new AuthenticationError('You need to be logged in!');
-
+      const user = await access.self(context, id);
+      const trips = await Trip.find({ creator: user._id }).select('_id');
+      const ids = trips.map(trip => trip._id);
+      await Trip.deleteMany({ creator: user._id });
+      await Trip.updateMany({ travelmates: user._id }, { $pull: { travelmates: user._id } });
+      await Profile.updateMany({ createdTrips: { $in: ids } }, { $pull: { createdTrips: { $in: ids } } });
+      await Profile.deleteMany({ profileUser: user._id });
+      return User.findByIdAndDelete(user._id);
     },
-  // removing a previously added interest from a profile
-    removeAnInterest:  async (parent, { id,interestId }, context) => {
-      if (context.user) {
-   
-      let profData= await  Profile.findOneAndUpdate(
-        { _id: id },
-        { $pull: { interests: interestId } },
-        {new:true}); 
-        profData = await profData.populate('profileUser interests createdTrips')   
-   
-        return await profData
-       }
-       throw new AuthenticationError('You need to be logged in!');
-      },
-      // add an interest from the list to  a profile
-    addAnInterest:  async (parent, { id,interestId }, context) => {
-      if (context.user) {
-   
-      let profData= await  Profile.findOneAndUpdate(
-        { _id: id },
-        { $addToSet: { interests: interestId } },
-        {new:true}); 
-        profData = await profData.populate('profileUser interests createdTrips')   
-   
-        return await profData
-        }
-      throw new AuthenticationError('You need to be logged in!');
-      },
-
-
-   
-
-    }
-
- 
+    removeAnInterest: async (parent, { id, interestId }, context) =>
+      ownProfile(context, id, { $pull: { interests: access.id(interestId) } }),
+    addAnInterest: async (parent, { id, interestId }, context) => {
+      await access.actor(context);
+      if (!await Interest.exists({ _id: access.id(interestId) })) access.fail('Choose an available interest.');
+      return ownProfile(context, id, { $addToSet: { interests: interestId } });
+    },
+  },
 };
 
-
+// Keep database error details, hashes and supplied credentials out of API errors.
+for (const fields of Object.values(resolvers)) {
+  for (const [name, resolver] of Object.entries(fields)) {
+    fields[name] = async (...args) => {
+      try { return await resolver(...args); }
+      catch (error) { throw access.publicError(error); }
+    };
+  }
+}
 module.exports = resolvers;
