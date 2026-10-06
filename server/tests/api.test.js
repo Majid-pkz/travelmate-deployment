@@ -190,6 +190,12 @@ test('account, profile, trip and photo flows enforce ownership against a real di
     await once(httpServer, 'listening');
     assert.equal((await fetch(base + aliceProfileImage)).status, 200);
     assert.equal((await fetch(base + aliceTripImage)).status, 200);
+    const downloads = await Promise.all(Array.from({ length: 35 }, async () => {
+      const response = await fetch(base + aliceTripImage);
+      await response.arrayBuffer();
+      return response.status;
+    }));
+    assert.ok(downloads.every(status => status === 200), 'Loading trip cards must not consume the upload allowance');
     const search = success(await query('{searchTrips(departureLocation:"West"){_id image}}')).searchTrips;
     assert.equal(search.find(trip => trip._id === aliceTrip._id).image, aliceTripImage);
     const own = success(await query('query($user:ID!){myTrips(travelmates:$user){_id image}}', { user: alice.user._id }, alice.token)).myTrips;
@@ -285,6 +291,7 @@ test('account, profile, trip and photo flows enforce ownership against a real di
         await page.getByText('Updated browser biography', { exact: true }).waitFor();
 
         await page.getByRole('link', { name: 'Start a New Trip', exact: true }).click();
+        await page.setViewportSize({ width: 390, height: 844 });
         function displayDate(days) {
           const date = new Date(Date.now() + days * 86_400_000);
           return [date.getDate(), date.getMonth() + 1, date.getFullYear()].map((part, index) => index < 2 ? String(part).padStart(2, '0') : part).join('/');
@@ -318,6 +325,7 @@ test('account, profile, trip and photo flows enforce ownership against a real di
         assert.equal(await Trip.countDocuments({ creator: carol._id }), 1);
         await page.getByRole('button', { name: 'Retry photo', exact: true }).click();
         await page.getByText('Trip photo saved.', { exact: true }).waitFor();
+        await page.setViewportSize({ width: 1280, height: 800 });
         assert.equal(await Trip.countDocuments({ creator: carol._id }), 1, 'A photo retry must not create another trip');
         await page.getByRole('link', { name: 'My trips', exact: true }).click();
         await page.getByRole('heading', { name: 'Browser travellers trip' }).waitFor();

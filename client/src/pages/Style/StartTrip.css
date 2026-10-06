@@ -2,7 +2,7 @@
   background-image: url('../../assets/nature.jpg');
   padding: 25px 0 25px 0;
   background-size: cover;
-  height: 100vh;
+  min-height: 100vh;
 }
 /* Custom CSS */
 .custom-card {

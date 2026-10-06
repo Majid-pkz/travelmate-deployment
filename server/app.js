@@ -51,7 +51,10 @@ async function createApp() {
     expressMiddleware(server, { context: async ({ req }) => authMiddleware({ req }) }),
   );
   app.use('/api/images',
-    rateLimit({ windowMs: 60_000, limit: 30, standardHeaders: 'draft-8', legacyHeaders: false }),
+    rateLimit({ windowMs: 60_000, limit: 300, standardHeaders: 'draft-8', legacyHeaders: false,
+      skip: req => !['GET', 'HEAD'].includes(req.method) }),
+    rateLimit({ windowMs: 60_000, limit: 30, standardHeaders: 'draft-8', legacyHeaders: false,
+      skip: req => req.method !== 'POST' }),
     imageRoutes,
   );
   app.get('/api/health', (req, res) => {

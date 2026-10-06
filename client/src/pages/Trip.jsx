@@ -79,6 +79,7 @@ const TripCard = ({ trip }) => {
   return (
     <Card sx={{ maxWidth: '90%', direction: 'row',justifyContent: 'center', alignItems: 'center', marginLeft: '1.2rem' }}>
       <CardHeader
+        disableTypography
         variant="body5"
         sx={{}}
         avatar={
