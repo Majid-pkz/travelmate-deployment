@@ -77,12 +77,12 @@ const Header = () => {
                 </li>
                 <li>
                   <NavLink className="login" onClick={handleShowNavbar} to="/login">
-                    Login
+                    Log in
                   </NavLink>
                 </li>
                 <li>
                   <NavLink className="signup" onClick={handleShowNavbar} to="/signup">
-                    Signup
+                    Sign up
                   </NavLink>
                 </li>
               </ul>

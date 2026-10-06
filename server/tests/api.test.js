@@ -273,52 +273,72 @@ test('account, profile, trip and photo flows enforce ownership against a real di
       const { chromium } = clientRequire('playwright');
       const browser = await chromium.launch();
       try {
-        const context = await browser.newContext();
+        const context = await browser.newContext({ timezoneId: 'Australia/Sydney', viewport: { width: 1280, height: 800 } });
         const page = await context.newPage();
         const errors = [];
         page.on('pageerror', error => errors.push(error.message));
         await page.route('**/*', route => route.request().url().startsWith(base) ? route.continue() : route.abort());
+        await page.route(base + '/api/locations?*', route => route.fulfill({ contentType: 'application/json', body: JSON.stringify({ locations: [
+          { id: '2147714', name: 'Sydney', region: 'New South Wales', country: 'Australia' },
+          { id: '1850147', name: 'Tokyo', region: 'Tokyo', country: 'Japan' },
+        ] }) }));
         async function signup(first, email) {
           await page.goto(base + '/signup');
-          await page.getByLabel('First Name').fill(first);
-          await page.getByLabel('Last Name').fill('Browser Tester');
+          await page.getByLabel('First name').fill(first);
+          await page.getByLabel('Last name').fill('Browser Tester');
           await page.getByLabel('Email address').fill(email);
           await page.getByLabel('Password', { exact: true }).fill(rawPassword);
-          await page.getByRole('button', { name: 'Submit', exact: true }).click();
+          await page.getByLabel('Password', { exact: true }).press('Enter');
           await page.waitForURL(base + '/');
-          await page.getByRole('searchbox', { name: 'Departure location' }).waitFor();
+          await page.getByRole('combobox', { name: 'Departure location' }).waitFor();
         }
         async function createProfile() {
           await page.getByRole('link', { name: 'Profile', exact: true }).click();
-          await page.getByRole('heading', { name: 'Create your Profile' }).waitFor();
-          await page.getByPlaceholder('Location', { exact: true }).fill('Sydney');
+          await page.getByRole('heading', { name: 'Create your profile' }).waitFor();
+          const location = page.getByRole('combobox', { name: 'Location', exact: true });
+          await location.fill('syd');
+          await page.getByRole('option', { name: /Sydney.*Australia/ }).waitFor();
+          await location.press('ArrowDown');
+          await location.press('Enter');
+          assert.equal(await location.inputValue(), 'Sydney');
+          assert.ok(page.url().endsWith('/create-profile'), 'Selecting a city must not submit the profile');
           await page.locator('select[name="gender"]').selectOption('female');
           await page.getByPlaceholder('Age', { exact: true }).fill('32');
           await page.getByPlaceholder('Bio', { exact: true }).fill('Browser test traveller');
           await page.getByRole('combobox').last().fill('Hiking');
           await page.getByRole('combobox').last().press('Enter');
-          await page.getByRole('button', { name: 'Submit', exact: true }).click();
+          await page.getByPlaceholder('Age', { exact: true }).press('Enter');
           await page.waitForURL(base + '/my-profile');
-          await page.getByRole('heading', { name: 'Traveller Information' }).waitFor();
+          await page.getByRole('heading', { name: 'Traveller information' }).waitFor();
           await page.getByText('Hiking', { exact: true }).waitFor();
         }
         await signup('Carol', 'carol-browser@example.com');
         await createProfile();
         const png = await sharp({ create: { width: 16, height: 16, channels: 3, background: '#ff9900' } }).png().toBuffer();
+        assert.equal(await page.locator('input[type="file"]').count(), 0, 'Photo controls are hidden on a normal profile visit');
+        await page.getByRole('button', { name: 'Add profile photo', exact: true }).click();
         await page.getByLabel('Profile photo (PNG or JPEG, up to 2 MB)').setInputFiles({ name: 'photo.png', mimeType: 'image/png', buffer: png });
-        await page.getByRole('button', { name: 'Upload', exact: true }).click();
+        await page.getByRole('button', { name: 'Upload photo', exact: true }).click();
         await page.getByText('Profile photo updated.', { exact: true }).waitFor();
         await page.waitForFunction(() => document.querySelector('img[alt="Avatar"]')?.naturalWidth > 0);
-        await page.getByRole('button', { name: 'Edit', exact: true }).click();
+        assert.equal(await page.locator('input[type="file"]').count(), 0, 'A successful upload closes the photo editor');
+        assert.equal(await page.locator('.profile-avatar').evaluate(element => getComputedStyle(element).borderRadius), '50%');
+        await page.reload();
+        await page.getByRole('button', { name: 'Change profile photo', exact: true }).waitFor();
+        assert.equal(await page.locator('input[type="file"]').count(), 0, 'Revisiting a profile keeps the upload controls hidden');
+        await page.getByRole('button', { name: 'Edit profile', exact: true }).click();
         await page.locator('textarea').fill('Updated browser biography');
-        await page.getByRole('button', { name: 'Save', exact: true }).click();
+        await page.locator('textarea').press('Enter');
+        assert.equal(await page.getByRole('button', { name: 'Save changes', exact: true }).count(), 1, 'Enter in a biography creates a newline');
+        await page.locator('textarea').fill('Updated browser biography');
+        await page.getByLabel('Age', { exact: true }).press('Enter');
         await page.getByText('Updated browser biography', { exact: true }).waitFor();
 
         await page.getByRole('link', { name: 'Start a New Trip', exact: true }).click();
         await page.setViewportSize({ width: 390, height: 844 });
         function displayDate(days) {
           const date = new Date(Date.now() + days * 86_400_000);
-          return [date.getDate(), date.getMonth() + 1, date.getFullYear()].map((part, index) => index < 2 ? String(part).padStart(2, '0') : part).join('/');
+          return [date.getFullYear(), String(date.getMonth() + 1).padStart(2, '0'), String(date.getDate()).padStart(2, '0')].join('-');
         }
         async function fillTrip(title, departure) {
           await page.getByPlaceholder('Title', { exact: true }).fill(title);
@@ -330,10 +350,21 @@ test('account, profile, trip and photo flows enforce ownership against a real di
           await page.getByPlaceholder('End Date', { exact: true }).fill(displayDate(9));
           await page.getByPlaceholder('End Date', { exact: true }).press('Tab');
         }
+        await page.getByRole('heading', { name: 'Start a trip', exact: true }).waitFor();
+        assert.equal(await page.locator('.form-error').count(), 0, 'New trip forms must not start with red errors');
+        await page.getByPlaceholder('Title', { exact: true }).focus();
+        await page.getByPlaceholder('Description', { exact: true }).focus();
+        await page.getByText('Title is required.', { exact: true }).waitFor();
+        await page.getByRole('button', { name: 'Create trip', exact: true }).click();
+        await page.getByText('End date is required.', { exact: true }).waitFor();
         await fillTrip('Browser travellers trip', 'Browser departure');
+        await page.getByPlaceholder('End Date', { exact: true }).fill(displayDate(5));
+        await page.getByPlaceholder('Title', { exact: true }).focus();
+        await page.getByText('End date must be on or after the start date.', { exact: true }).waitFor();
+        await page.getByPlaceholder('End Date', { exact: true }).fill(displayDate(9));
         await page.getByLabel('Trip photo (optional)', { exact: true }).setInputFiles({ name: 'invalid.txt', mimeType: 'text/plain', buffer: Buffer.from('invalid') });
         await page.getByText('Choose a PNG or JPEG image.', { exact: true }).waitFor();
-        assert.equal(await page.getByRole('button', { name: 'Submit', exact: true }).isDisabled(), true);
+        assert.equal(await page.getByRole('button', { name: 'Create trip', exact: true }).isDisabled(), true);
         await page.getByLabel('Trip photo (optional)', { exact: true }).setInputFiles({ name: 'trip.png', mimeType: 'image/png', buffer: png });
         let photoAttempts = 0;
         await page.route(base + '/api/images/trips/*', route => {
@@ -342,11 +373,12 @@ test('account, profile, trip and photo flows enforce ownership against a real di
           }
           return route.continue();
         });
-        await page.getByRole('button', { name: 'Submit', exact: true }).click();
-        await page.getByText(/Success! You may now head/).waitFor();
+        await page.getByPlaceholder('Title', { exact: true }).press('Enter');
+        await page.getByRole('heading', { name: 'Trip created', exact: true }).waitFor();
         await page.getByText('Temporary test upload failure.', { exact: true }).waitFor();
         const carol = await User.findOne({ email: 'carol-browser@example.com' });
         assert.equal(await Trip.countDocuments({ creator: carol._id }), 1);
+        assert.equal((await Trip.findOne({ creator: carol._id })).startDate.slice(0, 10), displayDate(7), 'Trip calendar dates must not shift in the Sydney timezone');
         await page.getByRole('button', { name: 'Retry photo', exact: true }).click();
         await page.getByText('Trip photo saved.', { exact: true }).waitFor();
         await page.setViewportSize({ width: 1280, height: 800 });
@@ -368,23 +400,23 @@ test('account, profile, trip and photo flows enforce ownership against a real di
         const updatedTripImage = await page.getByRole('img', { name: 'Browser travellers trip', exact: true }).getAttribute('src');
         await page.getByRole('link', { name: 'Start a New Trip', exact: true }).click();
         await fillTrip('Trip without photo', 'Browser departure');
-        await page.getByRole('button', { name: 'Submit', exact: true }).click();
-        await page.getByText(/Success! You may now head/).waitFor();
+        await page.getByPlaceholder('Title', { exact: true }).press('Enter');
+        await page.getByRole('heading', { name: 'Trip created', exact: true }).waitFor();
         await page.getByRole('link', { name: 'My trips', exact: true }).click();
         await page.getByRole('heading', { name: 'Trip without photo' }).waitFor();
         assert.match(await page.getByRole('img', { name: 'Trip without photo', exact: true }).getAttribute('src'), /oceanView/);
         await page.getByRole('link', { name: 'Logout', exact: true }).click();
-        await page.locator('header').getByRole('link', { name: 'Login', exact: true }).waitFor();
+        await page.locator('header').getByRole('link', { name: 'Log in', exact: true }).waitFor();
 
         await signup('Dan', 'dan-browser@example.com');
         await createProfile();
         await page.getByRole('link', { name: 'Start a New Trip', exact: true }).click();
         await fillTrip('Dan organizes a trip', 'Browser departure');
-        await page.getByRole('button', { name: 'Submit', exact: true }).click();
-        await page.getByText(/Success! You may now head/).waitFor();
+        await page.getByPlaceholder('Title', { exact: true }).press('Enter');
+        await page.getByRole('heading', { name: 'Trip created', exact: true }).waitFor();
         await page.goto(base + '/');
-        await page.getByRole('searchbox', { name: 'Departure location' }).fill('Browser departure');
-        await page.getByRole('button', { name: 'Search trips', exact: true }).click();
+        await page.getByRole('combobox', { name: 'Departure location' }).fill('Browser departure');
+        await page.getByRole('combobox', { name: 'Departure location', exact: true }).press('Enter');
         await page.getByRole('img', { name: 'Browser travellers trip', exact: true }).waitFor();
         assert.equal(await page.getByRole('img', { name: 'Browser travellers trip', exact: true }).getAttribute('src'), updatedTripImage);
         const tripCard = page.getByRole('article', { name: 'Browser travellers trip', exact: true });
@@ -419,7 +451,7 @@ test('account, profile, trip and photo flows enforce ownership against a real di
         await page.goto(base + '/login');
         await page.getByLabel('Email address').fill('carol-browser@example.com');
         await page.getByLabel('Password', { exact: true }).fill(rawPassword);
-        await page.getByRole('button', { name: 'Login', exact: true }).click();
+        await page.getByLabel('Password', { exact: true }).press('Enter');
         await page.waitForURL(base + '/');
         await page.getByRole('link', { name: 'Profile', exact: true }).click();
         await page.getByText('Updated browser biography', { exact: true }).waitFor();
@@ -427,7 +459,7 @@ test('account, profile, trip and photo flows enforce ownership against a real di
         await page.getByRole('heading', { name: 'Browser travellers trip' }).waitFor();
         assert.equal(await page.getByRole('img', { name: 'Browser travellers trip', exact: true }).getAttribute('src'), updatedTripImage);
         assert.deepEqual(errors, [], 'Real account/trip pages should render without JavaScript errors');
-        console.log('Production browser account/profile/trip/photo flows, organizing/joined sections, organizer avatars and stable card heights passed');
+        console.log('Production browser profile redesign, hidden photo controls, delayed validation, city keyboard selection and Enter form submission passed');
       } finally { await browser.close(); }
     });
   }

@@ -1,215 +1,125 @@
-import React, { useEffect, useState } from 'react';
+import { useRef, useState } from 'react';
 import { useQuery, useMutation } from '@apollo/client';
+import { Link, Navigate } from 'react-router-dom';
+import Select from 'react-select';
 import { QUERY_PROFILE, QUERY_INTEREST } from '../utils/queries';
 import { UPDATE_PROFILE } from '../utils/mutations';
-import Upload from '../components/Upload';
-import Select from 'react-select';
-import './Style/displayProfile.css'
 import Auth from '../utils/auth';
-import { Navigate } from 'react-router-dom';
+import Upload from '../components/Upload';
+import CityInput from '../components/CityInput';
+import '../components/Forms.css';
+import './Style/displayProfile.css';
 
-const PersonalProfile = () => {
+const optionsFor = interests => (interests ?? []).filter(Boolean).map(interest => ({
+  value: interest._id, label: Array.isArray(interest.label) ? interest.label.join(', ') : interest.label,
+}));
+
+export default function PersonalProfile() {
   const userId = Auth.getProfile()?.data?._id;
   const { loading, error, data, refetch } = useQuery(QUERY_PROFILE, {
-    variables: { profileUser: userId },
-    skip: !userId,
+    variables: { profileUser: userId }, skip: !userId, fetchPolicy: 'cache-and-network',
   });
-  const { loading: interestLoading, data: interestData } = useQuery(QUERY_INTEREST);
-  const [updateProfile] = useMutation(UPDATE_PROFILE);
-  const [profileUser, setProfileUser] = useState({});
-  const [age, setAge] = useState('');
-  const [gender, setGender] = useState('');
-  const [bio, setBio] = useState('');
-  const [selectedInterests, setSelectedInterests] = useState([]); // Initialize as an empty array
-  const [isEditing, setIsEditing] = useState(false);
-
-  useEffect(() => {
-    if (data?.profile) {
-      setProfileUser(data.profile.profileUser);
-      setAge(data.profile.age ?? '');
-      setGender(data.profile.gender ?? '');
-      setBio(data.profile.bio ?? '');
-
-      // Filter out null values from the interests array
-      const filteredInterests = data.profile.interests
-        .filter((interest) => interest !== null)
-        .map((interest) => ({
-          value: interest._id,
-          label: Array.isArray(interest.label) ? interest.label.join(', ') : interest.label,
-        }));
-      setSelectedInterests(filteredInterests);
-    }
-  }, [data]);
-
-
-  const handleUpdateProfile = async () => {
-    try {
-      // Extract the ID values from selectedInterests and convert them to strings
-      const selectedInterestValues = selectedInterests
-        .filter((interest) => interest !== null)
-        .map((interest) => interest.value);
-
-      await updateProfile({
-        variables: {
-          id: userId,
-          age: age !== '' ? parseInt(age, 10) : null,
-          gender,
-          bio,
-          interests: selectedInterestValues,
-        },
-      });
-      setIsEditing(false);
-      refetch();
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-
-
-
+  const { data: interestData } = useQuery(QUERY_INTEREST);
+  const [updateProfile, { loading: saving }] = useMutation(UPDATE_PROFILE);
+  const [draft, setDraft] = useState(null);
+  const [photoOpen, setPhotoOpen] = useState(false);
+  const [status, setStatus] = useState('');
+  const [saveError, setSaveError] = useState('');
+  const [failedImage, setFailedImage] = useState(null);
+  const photoButton = useRef(null);
   if (!userId) return <Navigate to="/login" replace />;
-  if (loading || interestLoading) {
-    return <div>Loading...</div>;
-  }
-
-  if (error) {
-    return <div>Error: {error.message}</div>;
-  }
-
+  if (loading && !data) return <main className="account-page"><output>Loading profile…</output></main>;
+  if (error) return <main className="account-page"><p role="alert">Could not load your profile. Please try again.</p></main>;
   if (!data?.profile) return <Navigate to="/create-profile" replace />;
-  const { image, createdTrips } = data.profile;
-
-  const interestOptions = interestData?.interests.map((interest) => ({
-    value: interest._id,
-    label: Array.isArray(interest.label) ? interest.label.join(', ') : interest.label,
-  }));
-
-  const handleInterestsChange = (selectedOptions) => {
-    setSelectedInterests(selectedOptions);
-  };
-
+  const profile = data.profile;
+  const person = profile.profileUser;
+  const fullName = [person.firstname, person.lastname].filter(Boolean).join(' ');
+  const initials = [person.firstname?.[0], person.lastname?.[0]].filter(Boolean).join('').toUpperCase();
+  const interests = optionsFor(profile.interests);
+  const trips = profile.createdTrips ?? [];
+  function edit() {
+    setPhotoOpen(false);
+    setStatus('');
+    setSaveError('');
+    setDraft({ location: profile.location ?? '', age: profile.age ?? '', gender: profile.gender ?? '',
+      bio: profile.bio ?? '', interests });
+  }
+  function change(name, value) { setDraft(current => ({ ...current, [name]: value })); }
+  async function save(event) {
+    event.preventDefault();
+    if (saving) return;
+    setSaveError('');
+    try {
+      await updateProfile({ variables: { id: userId, location: draft.location,
+        age: draft.age === '' ? null : Number(draft.age), gender: draft.gender, bio: draft.bio,
+        interests: draft.interests.map(interest => interest.value) } });
+      await refetch();
+      setDraft(null);
+      setStatus('Profile updated.');
+    } catch (failure) { setSaveError(failure.message || 'Could not save your profile. Please try again.'); }
+  }
   return (
-    <section className="" style={{backgroundColor:'var(--beige)'}}>
-  <div className="container-fluid" >
-    <div className="row justify-content-center align-items-center h-100" >
-      <div className="col-lg-10 mb-4 mb-lg-0">
-        <div className="card mb-3" style={{ borderRadius: '.8rem' }}>
-          <div className="row g-0">
-            <div className="col-md-4 gradient-custom text-center text-white" style={{ borderTopLeftRadius: '.5rem', borderBottomLeftRadius: '.5rem' }}>
-              {image && <img src={image} alt="Avatar" className="my-5" style={{ width: '150px' }} />}
-              <h5 className="card-title text-black">{profileUser.firstname}</h5>
-              <h5 className="card-title text-black">{profileUser.lastname}</h5>
-              <p className="card-text text-black">{profileUser.email}</p>
-              
-              <div className="form-control form-group mt-4" style={{border:'none'}}>
-  <div className="custom-upload">
-    <Upload className="profile-form" getUserDetails={refetch} />
-  </div>
-</div>
-              
-              {!isEditing && (
-                <button type="button" className="btn btn-link mb-5" onClick={() => setIsEditing(true)}>
-                  Edit profile
-                </button>
-              )}
-            </div>
-            <div className="col-md-8">
-              <div className="card-body p-4">
-                <h6 className="card-title">Traveller Information</h6>
-                <hr className="mt-0 mb-4" />
-                <div className="row pt-1">
-                  <div className="col-6 mb-3">
-                    <h6 className="card-title">Age</h6>
-                    {isEditing ? (
-                      <input type="number" value={age} onChange={(e) => setAge(e.target.value)} className="form-control" />
-                    ) : (
-                      <p className="text-muted">{age}</p>
-                    )}
-                  </div>
-                  <div className="col-6 mb-3">
-                    <h6 className="card-title">Gender</h6>
-                    {isEditing ? (
-                      <select value={gender} onChange={(e) => setGender(e.target.value)} className="form-select">
-                        <option value="">Select Gender</option>
-                        <option value="male">Male</option>
-                        <option value="female">Female</option>
-                        <option value="other">Other</option>
-                      </select>
-                    ) : (
-                      <p className="text-muted">{gender}</p>
-                    )}
-                  </div>
-                </div>
-                <div style={{ paddingBottom: '3rem' }}>
-                  <h6 className="card-title">Bio</h6>
-                  <hr className="mt-0 mb-4" />
-                  {isEditing ? (
-                    <textarea value={bio} onChange={(e) => setBio(e.target.value)} className="form-control mb-3" rows={4} />
-                  ) : (
-                    <p className="card-text" style={{ color: 'var(--black)' }}>{bio}</p>
-                  )}
-                </div>
-                <div style={{ paddingBottom: '3rem' }}>
-                  <h6 className="card-title">Interests</h6>
-                  <hr className="mt-0 mb-4" />
-                  {isEditing ? (
-                    <Select
-                      className="custom-select"
-                      placeholder="Interests"
-                      name="interests"
-                      value={selectedInterests}
-                      onChange={handleInterestsChange}
-                      options={interestOptions}
-                      isMulti
-                    />
-                  ) : (
-                    <p className="card-text" style={{ color: 'var(--black)' }}>{selectedInterests.map((interest) => interest.label).join(', ')}</p>
-                  )}
-                </div>
-                <div>
-                  <h6 className="card-title">Created Trips</h6>
-                  <hr className="mt-0 mb-4" />
-                  {createdTrips.map((trip) => (
-                    <div key={trip.title}>
-                      <h6 className="card-title">"{trip.title}"</h6>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="d-flex justify-content-end">
-                  {isEditing ? (
-                    <>
-                      <button className="btn btn-primary me-2" onClick={handleUpdateProfile}>
-                        Save
-                      </button>
-                      <button className="btn btn-link" onClick={() => setIsEditing(false)}>
-                        Cancel
-                      </button>
-                    </>
-                  ) : (
-                    <button className="btn btn-primary" onClick={() => setIsEditing(true)}>
-                      Edit
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
+    <main className="account-page">
+      <div className="account-page__heading"><h1>My profile</h1><p>A little about you and the adventures you enjoy.</p></div>
+      {status && <output className="account-status">{status}</output>}
+      <div className="profile-layout">
+        <aside className="profile-identity">
+          <div className="profile-avatar">
+            {profile.image && failedImage !== profile.image
+              ? <img src={profile.image} alt="Avatar" onError={() => setFailedImage(profile.image)} />
+              : <span aria-label="Profile initials">{initials || 'T'}</span>}
           </div>
-        </div>
+          <h2>{fullName}</h2>
+          <p className="profile-email">{person.email}</p>
+          <p className="profile-location">{profile.location || 'Location not added yet'}</p>
+          <span className="profile-stat">{trips.length} trip{trips.length === 1 ? '' : 's'} organized</span>
+          <button ref={photoButton} type="button" className="account-button account-button--secondary" disabled={Boolean(draft)}
+            aria-expanded={photoOpen} aria-controls="profile-photo-panel"
+            onClick={() => { setPhotoOpen(!photoOpen); setStatus(''); }}>
+            {profile.image ? 'Change profile photo' : 'Add profile photo'}
+          </button>
+        </aside>
+        <section className="form-panel profile-information" aria-labelledby="profile-information-heading">
+          <div className="profile-section-heading">
+            <h2 id="profile-information-heading">Traveller information</h2>
+            {!draft && <button type="button" className="account-button account-button--secondary" onClick={edit}>Edit profile</button>}
+          </div>
+          {draft ? <form onSubmit={save}>
+            <fieldset disabled={saving}>
+              <div className="form-fields">
+                <div className="form-field form-field--wide"><CityInput label="Location" placeholder="Location" name="location"
+                  value={draft.location} onChange={value => change('location', value)} maxLength={120} /></div>
+                <div className="form-field"><label htmlFor="profile-age">Age</label><input id="profile-age" name="age" type="number" min="0" max="120" step="1"
+                  value={draft.age} onChange={event => change('age', event.target.value)} /></div>
+                <div className="form-field"><label htmlFor="profile-gender">Gender</label><select id="profile-gender" name="gender" value={draft.gender} onChange={event => change('gender', event.target.value)}>
+                  <option value="">Prefer not to say</option><option value="male">Male</option><option value="female">Female</option><option value="other">Other</option>
+                </select></div>
+                <div className="form-field form-field--wide"><label htmlFor="profile-bio">About me</label><textarea id="profile-bio" name="bio" maxLength={2000}
+                  value={draft.bio} onChange={event => change('bio', event.target.value)} rows={4} /></div>
+                <div className="form-field form-field--wide"><label htmlFor="profile-interests">Interests</label><Select inputId="profile-interests" name="interests" isMulti
+                  value={draft.interests} options={optionsFor(interestData?.interests)} onChange={value => change('interests', value ?? [])} /></div>
+              </div>
+              {saveError && <p role="alert" className="form-error">{saveError}</p>}
+              <div className="form-actions"><button type="submit" className="account-button">{saving ? 'Saving…' : 'Save changes'}</button>
+                <button type="button" className="account-button account-button--secondary" onClick={() => { setDraft(null); setSaveError(''); }}>Cancel</button></div>
+            </fieldset>
+          </form> : <>
+            <dl className="profile-facts"><div><dt>Age</dt><dd>{profile.age ?? 'Not added'}</dd></div>
+              <div><dt>Gender</dt><dd>{profile.gender || 'Not added'}</dd></div>
+              <div><dt>Location</dt><dd>{profile.location || 'Not added'}</dd></div></dl>
+            <div className="profile-detail"><h3>About me</h3><p>{profile.bio || 'Tell your travelmates a little about yourself.'}</p></div>
+            <div className="profile-detail"><h3>Interests</h3>{interests.length ? <ul className="profile-interests">{interests.map(interest => <li key={interest.value}>{interest.label}</li>)}</ul>
+              : <p>Add a few interests to help you find like-minded travelmates.</p>}</div>
+            <div className="profile-detail"><h3>Trips I organize</h3>{trips.length ? <ul className="profile-trip-list">{trips.map(trip => <li key={trip._id}>{trip.title}</li>)}</ul>
+              : <p>No trips created yet. <Link to="/new-trip">Plan your first trip</Link></p>}</div>
+          </>}
+        </section>
       </div>
-    </div>
-  </div>
-</section>
+      {photoOpen && <section id="profile-photo-panel" className="form-panel profile-photo-panel" aria-labelledby="photo-editor-heading">
+        <h2 id="photo-editor-heading">Update your profile photo</h2>
+        <Upload getUserDetails={refetch} onSaved={() => { setPhotoOpen(false); setStatus('Profile photo updated.'); photoButton.current?.focus(); }}
+          onCancel={() => { setPhotoOpen(false); photoButton.current?.focus(); }} />
+      </section>}
+    </main>
   );
-};
-
-export default PersonalProfile;
-
-
-
-
-
-
-
-
+}

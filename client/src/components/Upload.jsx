@@ -1,40 +1,45 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import axios from 'axios';
 import Auth from '../utils/auth';
+import TripPhotoPicker from './TripPhotoPicker';
+import { photoValidationError } from '../utils/tripPhotos';
+import './Forms.css';
 
-const Upload = ({ getUserDetails }) => {
-  const [selectedFile, setSelectedFile] = useState(null);
+export default function Upload({ getUserDetails, onSaved, onCancel }) {
+  const [file, setFile] = useState(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
-  const handleSubmit = async (event) => {
+  const invalid = photoValidationError(file);
+  async function submit(event) {
     event.preventDefault();
-    if (!selectedFile || busy) return;
+    if (!file || invalid || busy) return;
     if (!Auth.loggedIn()) { setMessage('Log in again before uploading.'); return; }
-    if (selectedFile.size > 2 * 1024 * 1024) { setMessage('Choose an image smaller than 2 MB.'); return; }
     setBusy(true);
     setMessage('');
-    const formData = new FormData();
-    formData.append('image', selectedFile);
+    const body = new FormData();
+    body.append('image', file);
     try {
-      await axios.post('/api/images', formData, {
-        headers: { authorization: 'Bearer ' + Auth.getToken() },
-      });
-      await getUserDetails();
+      await axios.post('/api/images', body, { headers: { authorization: 'Bearer ' + Auth.getToken() } });
+      await getUserDetails?.();
+      setFile(null);
       setMessage('Profile photo updated.');
+      onSaved?.();
     } catch (error) {
       setMessage(error.response?.data?.error || 'Upload failed. Please try again.');
     } finally { setBusy(false); }
-  };
+  }
   return (
-    <form onSubmit={handleSubmit}>
-      <label htmlFor="profile-photo">Profile photo (PNG or JPEG, up to 2 MB)</label>
-      <input id="profile-photo" type="file" accept="image/png,image/jpeg"
-        onChange={(event) => { setSelectedFile(event.target.files[0]); setMessage(''); }} />
-      <button className="btn btn-primary" type="submit" disabled={!selectedFile || busy}>
-        {busy ? 'Uploading...' : 'Upload'}
-      </button>
-      {message && <output className="d-block">{message}</output>}
+    <form className="profile-photo-editor" onSubmit={submit} aria-label="Edit profile photo">
+      <TripPhotoPicker file={file} disabled={busy} onChange={value => { setFile(value); setMessage(''); }}
+        label="Profile photo (PNG or JPEG, up to 2 MB)" previewAlt="Selected profile preview" />
+      {invalid && <p className="form-error" role="alert">{invalid}</p>}
+      <div className="form-actions">
+        <button className="account-button" type="submit" disabled={!file || Boolean(invalid) || busy}>
+          {busy ? 'Uploading…' : 'Upload photo'}
+        </button>
+        {onCancel && <button type="button" className="account-button account-button--secondary" disabled={busy} onClick={onCancel}>Cancel</button>}
+      </div>
+      {message && <output className="form-helper">{message}</output>}
     </form>
   );
-};
-export default Upload;
+}

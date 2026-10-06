@@ -103,6 +103,7 @@ query profile($profileUser: ID!) {
     verified
     subscribed
     createdTrips {
+      _id
       title
     }
     tripCount

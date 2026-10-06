@@ -1,234 +1,117 @@
-import React, { useState } from "react";
-import { Link, Navigate } from "react-router-dom";
-import { useMutation } from "@apollo/client";
-import { CREATE_TRIP } from "../utils/mutations";
-import DatePicker from "react-datepicker";
-import "react-datepicker/dist/react-datepicker.css";
-import "./Style/StartTrip.css";
-import Auth from "../utils/auth";
+import { useRef, useState } from 'react';
+import { Link, Navigate } from 'react-router-dom';
+import { useMutation } from '@apollo/client';
+import { CREATE_TRIP } from '../utils/mutations';
+import Auth from '../utils/auth';
+import CityInput from '../components/CityInput';
 import TripPhotoPicker from '../components/TripPhotoPicker';
 import { photoValidationError, photoUploadError, uploadTripPhoto } from '../utils/tripPhotos';
+import '../components/Forms.css';
 
-const StartTrip = () => {
+function todayValue() {
+  const date = new Date();
+  return [date.getFullYear(), String(date.getMonth() + 1).padStart(2, '0'), String(date.getDate()).padStart(2, '0')].join('-');
+}
+
+export default function StartTrip() {
   const userId = Auth.getProfile()?.data?._id;
-  const [formState, setFormState] = useState({
-    creator: userId || '',
-    title: "",
-    description: "",
-    departureLocation: "",
-    destination: "",
-    startDate: null,
-    endDate: null,
-  });
-
+  const form = useRef(null);
+  const [values, setValues] = useState({ title: '', description: '', departureLocation: '', destination: '', startDate: '', endDate: '' });
+  const [touched, setTouched] = useState({});
+  const [submitted, setSubmitted] = useState(false);
   const [createTrip, { error }] = useMutation(CREATE_TRIP);
   const [createdTrip, setCreatedTrip] = useState(null);
   const [photo, setPhoto] = useState(null);
   const [photoError, setPhotoError] = useState('');
   const [photoSaved, setPhotoSaved] = useState(false);
   const [saving, setSaving] = useState(false);
-
-  const choosePhoto = (file) => {
-    setPhoto(file);
-    setPhotoError(photoValidationError(file));
-  };
-
-  const savePhoto = async (tripId) => {
+  const errors = {};
+  for (const [key, label] of Object.entries({ title: 'Title', description: 'Description', departureLocation: 'Departure location', destination: 'Destination', startDate: 'Start date', endDate: 'End date' })) {
+    if (!values[key].trim()) errors[key] = label + ' is required.';
+  }
+  if (values.startDate && values.startDate < todayValue()) errors.startDate = 'Choose today or a future date.';
+  if (values.startDate && values.endDate && values.endDate < values.startDate) errors.endDate = 'End date must be on or after the start date.';
+  const visibleError = name => (submitted || touched[name]) ? errors[name] : undefined;
+  const touch = name => setTouched(current => ({ ...current, [name]: true }));
+  const change = (name, value) => setValues(current => ({ ...current, [name]: value }));
+  function choosePhoto(file) { setPhoto(file); setPhotoError(photoValidationError(file)); }
+  async function savePhoto(tripId) {
     if (!photo) return;
-    try {
-      await uploadTripPhoto(tripId, photo);
-      setPhotoSaved(true);
-      setPhotoError('');
-    } catch (uploadError) {
-      setPhotoError(photoUploadError(uploadError));
-    }
-  };
-
-  const retryPhoto = async () => {
+    try { await uploadTripPhoto(tripId, photo); setPhotoSaved(true); setPhotoError(''); }
+    catch (failure) { setPhotoError(photoUploadError(failure)); }
+  }
+  async function retryPhoto() {
     if (saving || !photo || photoValidationError(photo)) return;
     setSaving(true);
-    try { await savePhoto(createdTrip._id); }
-    finally { setSaving(false); }
-  };
-
-  const handleChange = (event) => {
-    const { name, value } = event.target;
-
-    setFormState({
-      ...formState,
-      [name]: value,
-    });
-  };
-
-  const handleStartDateChange = (date) => {
-    setFormState({
-      ...formState,
-      startDate: date,
-    });
-  };
-
-  const handleEndDateChange = (date) => {
-    setFormState({
-      ...formState,
-      endDate: date,
-    });
-  };
-
-  const handleFormSubmit = async (event) => {
+    try { await savePhoto(createdTrip._id); } finally { setSaving(false); }
+  }
+  async function submit(event) {
     event.preventDefault();
-    if (saving || photoValidationError(photo)) return;
+    if (saving || createdTrip) return;
+    setSubmitted(true);
+    if (Object.keys(errors).length || photoValidationError(photo)) {
+      form.current?.elements.namedItem(Object.keys(errors)[0])?.focus();
+      return;
+    }
     setSaving(true);
     try {
-      const result = await createTrip({
-        variables: {
-          ...formState,
-          startDate: formState.startDate?.toISOString(),
-          endDate: formState.endDate?.toISOString(),
-        },
-      });
+      const result = await createTrip({ variables: { ...values, creator: userId } });
       setCreatedTrip(result.data.createTrip);
       await savePhoto(result.data.createTrip._id);
-    } catch (e) {
-      console.error(e);
-    } finally { setSaving(false); }
-  };
-
+    } catch { /* Apollo supplies the error below. */ }
+    finally { setSaving(false); }
+  }
+  function textField(name, label, maxLength, multiline = false) {
+    const id = 'trip-' + name;
+    const attrs = { id, name, placeholder: label, value: values[name], maxLength, required: true,
+      onChange: event => change(name, event.target.value), onBlur: () => touch(name),
+      'aria-invalid': Boolean(visibleError(name)), 'aria-describedby': visibleError(name) ? id + '-error' : undefined };
+    return <div className="form-field form-field--wide"><label htmlFor={id}>{label}</label>
+      {multiline ? <textarea {...attrs} rows={4} /> : <input {...attrs} type="text" />}
+      {visibleError(name) && <small id={id + '-error'} className="form-error">{visibleError(name)}</small>}
+    </div>;
+  }
   if (!userId) return <Navigate to="/login" replace />;
   return (
-    <main className="custom-trip flex-row justify-center ">
-    <div className="col-12 col-lg-6">
-      <div className="card custom-card">
-        <h4 className="card-header p-2 text-center">Start a Trip</h4>
-        {createdTrip ? (
-          <div className="p-3">
-            {saving ? <output className="d-block">Saving your trip photo…</output> : <>
-              <p style={{ color: "var(--black)", textAlign: "center" }}>
-                Success! You may now head <Link to="/">back to the homepage.</Link>
-              </p>
-              <p><Link to="/my-upcoming-trips">View your trips</Link></p>
-              {photoSaved && <output className="d-block">Trip photo saved.</output>}
-              {photo && !photoSaved && <>
-                <p>Your trip is created. You can retry saving its photo here or add one from My trips.</p>
-                <TripPhotoPicker file={photo} onChange={choosePhoto} />
-                {photoError && <p role="alert">{photoError}</p>}
-                <button type="button" className="btn btn-primary" onClick={retryPhoto}
-                  disabled={Boolean(photoValidationError(photo))}>Retry photo</button>
-              </>}
-            </>}
+    <main className="account-page account-page--narrow">
+      <div className="account-page__heading"><h1>Start a trip</h1><p>Share your plans and find people to explore with. All fields are required except the photo.</p></div>
+      {createdTrip ? <section className="form-panel">
+        <h2>Trip created</h2>
+        {saving ? <output>Saving your trip photo…</output> : <>
+          <p>Your adventure is ready for travelmates to join.</p>
+          {photoSaved && <output className="account-status">Trip photo saved.</output>}
+          {photo && !photoSaved && <>
+            <p>Your trip is saved. Retry its photo here or add one from My trips.</p>
+            <TripPhotoPicker file={photo} onChange={choosePhoto} />
+            {photoError && <p role="alert" className="form-error">{photoError}</p>}
+            <button type="button" className="account-button" onClick={retryPhoto} disabled={Boolean(photoValidationError(photo))}>Retry photo</button>
+          </>}
+          <div className="form-actions"><Link className="account-button" to="/my-upcoming-trips">View your trips</Link><Link className="account-button account-button--secondary" to="/">Back to home</Link></div>
+        </>}
+      </section> : <form className="form-panel" ref={form} onSubmit={submit} noValidate>
+        <fieldset disabled={saving}>
+          <div className="form-fields">
+            {textField('title', 'Title', 120)}
+            {textField('description', 'Description', 3000, true)}
+            <div className="form-field"><CityInput label="Departure location" placeholder="Departure Location" name="departureLocation" required maxLength={120}
+              value={values.departureLocation} onChange={value => change('departureLocation', value)} onBlur={() => touch('departureLocation')} error={visibleError('departureLocation')} /></div>
+            <div className="form-field"><CityInput label="Destination" placeholder="Destination" name="destination" required maxLength={120}
+              value={values.destination} onChange={value => change('destination', value)} onBlur={() => touch('destination')} error={visibleError('destination')} /></div>
+            {['startDate', 'endDate'].map(name => <div key={name} className="form-field">
+              <label htmlFor={'trip-' + name}>{name === 'startDate' ? 'Start date' : 'End date'}</label>
+              <input id={'trip-' + name} type="date" name={name} placeholder={name === 'startDate' ? 'Start Date' : 'End Date'} required
+                min={name === 'endDate' ? values.startDate || todayValue() : todayValue()} value={values[name]}
+                onChange={event => change(name, event.target.value)} onBlur={() => touch(name)} aria-invalid={Boolean(visibleError(name))}
+                aria-describedby={visibleError(name) ? name + '-error' : undefined} />
+              {visibleError(name) && <small id={name + '-error'} className="form-error">{visibleError(name)}</small>}
+            </div>)}
+            <div className="form-field form-field--wide"><TripPhotoPicker label="Trip photo (optional)" file={photo} onChange={choosePhoto} disabled={saving} />
+              {photoError && <p className="form-error" role="alert">{photoError}</p>}</div>
           </div>
-        ) : (
-          <form onSubmit={handleFormSubmit} className="trip-form">
-            <fieldset disabled={saving} className="border-0 p-0">
-            <div className="form-group">
-              <input
-                className="form-control"
-                placeholder="Title"
-                name="title"
-                type="text"
-                value={formState.title}
-                onChange={handleChange}
-                required 
-              />
-              {formState.title === "" && (
-                <small className="text-danger">Title is required.</small>
-              )}
-            </div>
-            <div className="form-group">
-              <input
-                className="form-control"
-                placeholder="Description"
-                name="description"
-                type="text"
-                value={formState.description}
-                onChange={handleChange}
-                required 
-              />
-              {formState.description === "" && (
-                <small className="text-danger">Description is required.</small>
-              )}
-            </div>
-            <div className="form-group">
-              <input
-                className="form-control"
-                placeholder="Departure Location"
-                name="departureLocation"
-                type="text"
-                value={formState.departureLocation}
-                onChange={handleChange}
-                required 
-              />
-              {formState.departureLocation === "" && (
-                <small className="text-danger">
-                  Departure Location is required.
-                </small>
-              )}
-            </div>
-            <div className="form-group">
-              <input
-                className="form-control"
-                placeholder="Destination"
-                name="destination"
-                type="text"
-                value={formState.destination}
-                onChange={handleChange}
-                required 
-              />
-              {formState.destination === "" && (
-                <small className="text-danger">Destination is required.</small>
-              )}
-            </div>
-            <div className="form-group">
-              <div className="datepicker-container">
-                <DatePicker
-                  className="form-control custom-datepicker close-icon"
-                  selected={formState.startDate}
-                  onChange={handleStartDateChange}
-                  dateFormat="dd/MM/yyyy"
-                  minDate={new Date()}
-                  isClearable
-                  placeholderText="Start Date"
-                  required
-                />
-              </div>
-            </div>
-            <div className="form-group">
-              <div className="datepicker-container">
-                <DatePicker
-                  className="form-control custom-datepicker close-icon"
-                  selected={formState.endDate}
-                  onChange={handleEndDateChange}
-                  dateFormat="dd/MM/yyyy"
-                  minDate={formState.startDate}
-                  isClearable
-                  placeholderText="End Date"
-                  required
-                />
-              </div>
-            </div>
-            <TripPhotoPicker label="Trip photo (optional)" file={photo} onChange={choosePhoto} disabled={saving} />
-            {photoError && <p role="alert">{photoError}</p>}
-            <button
-              className="btn btn-block btn-info"
-              style={{ cursor: "pointer" }}
-              type="submit"
-              disabled={saving || Boolean(photoValidationError(photo))}
-            >
-              {saving ? 'Saving…' : 'Submit'}
-            </button>
-            </fieldset>
-          </form>
-        )}
-
-        {error && (
-          <div className="my-3 p-3 bg-danger text-white">
-            {error.message}
-          </div>
-        )}
-      </div>
-    </div>
-  </main>
-)
-};
-
-export default StartTrip;
-
+          {error && <p role="alert" className="form-error">{error.message}</p>}
+          <div className="form-actions"><button type="submit" className="account-button" disabled={saving || Boolean(photoValidationError(photo))}>{saving ? 'Saving…' : 'Create trip'}</button></div>
+        </fieldset>
+      </form>}
+    </main>
+  );
+}

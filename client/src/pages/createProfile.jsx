@@ -1,169 +1,52 @@
-import React, { useEffect, useState } from 'react';
-import { Link, Navigate } from 'react-router-dom';
+import { useState } from 'react';
+import { Navigate, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery } from '@apollo/client';
+import Select from 'react-select';
 import { CREATE_PROFILE } from '../utils/mutations';
 import { PROFILE_EXISTS, QUERY_INTEREST } from '../utils/queries';
-import '../pages/Style/createProfile.css'
 import Auth from '../utils/auth';
-import Select from 'react-select';
+import CityInput from '../components/CityInput';
+import '../components/Forms.css';
 
-
-const Profile = () => {
-  const [redirectToProfile, setRedirectToProfile] = useState(false);
-  const [selectedInterests, setSelectedInterests] = useState([]);
-  const handleInterestsChange = (selectedOptions) => {
-    setSelectedInterests(selectedOptions);
-  };
-
-  const { data: interestData } = useQuery(QUERY_INTEREST);
-  const interestOptions = interestData?.interests.map((interest) => ({
-    value: interest._id,
-    label: Array.isArray(interest.label) ? interest.label.join(', ') : interest.label,
-  }));
-  
+export default function Profile() {
+  const navigate = useNavigate();
   const userId = Auth.getProfile()?.data?._id;
-  const [formState, setFormState] = useState({
-    profileUser: userId || '',
-    location: null,
-    gender: null,
-    age: null,
-    bio: null
-  });
-
-  const [createProfile, { error, data }] = useMutation(CREATE_PROFILE);
-
-  const { data: profileExistsData } = useQuery(PROFILE_EXISTS, {
-    variables: { profileUser: userId },
-    skip: !userId,
-  });
-
-  useEffect(() => {
-    if (profileExistsData && profileExistsData.profileExist) {
-      setRedirectToProfile(true);
-    }
-  }, [profileExistsData]);
-
-  const handleChange = (event) => {
-    const { name, value } = event.target;
-
-    setFormState({
-      ...formState,
-      [name]: value,
-    });
-  };
-
-  const handleFormSubmit = async (event) => {
+  const [values, setValues] = useState({ location: '', gender: '', age: '', bio: '' });
+  const [interests, setInterests] = useState([]);
+  const { data: interestData } = useQuery(QUERY_INTEREST);
+  const { loading, data: existing } = useQuery(PROFILE_EXISTS, { variables: { profileUser: userId }, skip: !userId });
+  const [createProfile, { error, loading: saving }] = useMutation(CREATE_PROFILE);
+  const options = (interestData?.interests ?? []).filter(Boolean).map(item => ({ value: item._id, label: Array.isArray(item.label) ? item.label.join(', ') : item.label }));
+  const change = (name, value) => setValues(current => ({ ...current, [name]: value }));
+  async function submit(event) {
     event.preventDefault();
-
+    if (saving) return;
     try {
-      await createProfile({
-        variables: {
-          ...formState,
-          age: formState.age ? parseInt(formState.age) : null,
-          interests: selectedInterests.map((interest) => interest.value), // Include selected interests in the form submission
-        
-        },
-        
-      });
-      window.location.href = "/my-profile";
-
-    } catch (e) {
-      console.error(e);
-    }
-  };
-  
-
-  if (!userId) return <Navigate to="/login" replace />;
-  if (redirectToProfile) {
-    
-    return <Navigate to="/my-profile" replace />;
+      await createProfile({ variables: { ...values, profileUser: userId, age: values.age === '' ? null : Number(values.age), interests: interests.map(item => item.value) } });
+      navigate('/my-profile', { replace: true });
+    } catch { /* Apollo supplies the error below. */ }
   }
-
+  if (!userId) return <Navigate to="/login" replace />;
+  if (loading) return <main className="account-page"><output>Loading profile…</output></main>;
+  if (existing?.profileExist) return <Navigate to="/my-profile" replace />;
   return (
-    <main className="custom-profile flex-row justify-center">
-      <div className="col-12 col-lg-8">
-        <div className="card custom-card">
-          <h4 className="card-header text-center p-2">Create your Profile</h4>
-
-
-            {data ? (
-              <p style={{ color: "var(--black)", textAlign: "center" }}>
-                Success! You may now head <Link to="/">back to the homepage.</Link>
-              </p>
-            ) : (
-              <form onSubmit={handleFormSubmit} className="profile-form">
-
-                <input
-                  className="form-input"
-                  placeholder="Location"
-                  name="location"
-                  type="text"
-                  value={formState.location || ""}
-                  onChange={handleChange}
-                />
-
-                <select
-                  className="form-select"
-                  name="gender"
-                  value={formState.gender || ""}
-                  onChange={handleChange}
-                >
-                  <option value="">Select Gender</option>
-                  <option value="male">Male</option>
-                  <option value="female">Female</option>
-                  <option value="other">Other</option>
-                </select>
-                <input
-                  className="form-input"
-                  placeholder="Age"
-                  name="age"
-                  type="text"
-                  value={formState.age || ""}
-                  onChange={handleChange}
-                />
-                <input
-                  className="form-input"
-                  placeholder="Bio"
-                  name="bio"
-                  type="text"
-                  value={formState.bio || ""}
-                  onChange={handleChange}
-                />
-                {/* <input
-                  className="form-input"
-                  placeholder="Interests"
-                  name="interests"
-
-                  value={formState.interests || ""}
-                  onChange={handleChange}
-                /> */}
-                <Select
-                className="custom-select"
-                placeholder="Interests"
-                name="interests"
-                value={selectedInterests}
-                onChange={handleInterestsChange}
-                options={interestOptions}
-                isMulti
-              />
-
-                <button
-                  className="btn btn-block btn-info"
-                  style={{ cursor: 'pointer' }}
-                  type="submit"
-                >
-                  Submit
-                </button>
-              </form>
-            )}
-
-            {error && (
-              <div className="my-3 p-3 bg-danger text-white">{error.message}</div>
-            )}
+    <main className="account-page account-page--narrow">
+      <div className="account-page__heading"><h1>Create your profile</h1><p>Tell future travelmates a little about yourself. These details are optional.</p></div>
+      <form className="form-panel" onSubmit={submit}>
+        <fieldset disabled={saving}>
+          <div className="form-fields">
+            <div className="form-field form-field--wide"><CityInput label="Location" placeholder="Location" name="location" maxLength={120} value={values.location} onChange={value => change('location', value)} /></div>
+            <div className="form-field"><label htmlFor="new-profile-gender">Gender</label><select id="new-profile-gender" name="gender" value={values.gender} onChange={event => change('gender', event.target.value)}>
+              <option value="">Prefer not to say</option><option value="male">Male</option><option value="female">Female</option><option value="other">Other</option>
+            </select></div>
+            <div className="form-field"><label htmlFor="new-profile-age">Age</label><input id="new-profile-age" name="age" type="number" placeholder="Age" min="0" max="120" step="1" value={values.age} onChange={event => change('age', event.target.value)} /></div>
+            <div className="form-field form-field--wide"><label htmlFor="new-profile-bio">About me</label><textarea id="new-profile-bio" name="bio" placeholder="Bio" maxLength={2000} value={values.bio} onChange={event => change('bio', event.target.value)} /></div>
+            <div className="form-field form-field--wide"><label htmlFor="new-profile-interests">Interests</label><Select inputId="new-profile-interests" name="interests" options={options} value={interests} onChange={value => setInterests(value ?? [])} isMulti /></div>
           </div>
-        </div>
+          {error && <p className="form-error" role="alert">{error.message}</p>}
+          <div className="form-actions"><button type="submit" className="account-button">{saving ? 'Saving…' : 'Create profile'}</button></div>
+        </fieldset>
+      </form>
     </main>
   );
-};
-
-export default Profile;
+}

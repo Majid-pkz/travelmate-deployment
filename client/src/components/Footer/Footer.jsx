@@ -28,6 +28,9 @@ const Footer = () => {
                 <FaGithub className="footer-icon" aria-hidden="true" /> View source on GitHub
               </a>
             </p>
+            <p className="footer-section-content">
+              City data: <a href="https://open-meteo.com/en/docs/geocoding-api">Open-Meteo</a> / <a href="https://www.geonames.org/">GeoNames</a>
+            </p>
           </div>
         </div>
       </div>

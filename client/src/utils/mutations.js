@@ -149,11 +149,13 @@ mutation updateProfile($id: ID!, $location: String, $gender: String, $age: Int, 
     age
     bio
     createdTrips {
+      _id
       title
     }
     gender
     image
     interests {
+      _id
       label
     }
     location

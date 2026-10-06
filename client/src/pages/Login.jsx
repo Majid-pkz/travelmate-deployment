@@ -1,95 +1,34 @@
-import React, {useState} from 'react';
-import JunglePic from '../assets/jungle.jpg';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useMutation } from '@apollo/client';
 import { LOGIN_USER } from '../utils/mutations';
-
 import Auth from '../utils/auth';
+import '../components/Forms.css';
 
-const Login = (props) => {
-  const [formState, setFormState] = useState({ email: '', password: '' });
-  const [login, { error }] = useMutation(LOGIN_USER);
-
-  const handleChange = (event) => {
-    const { name, value } = event.target;
-
-    setFormState({
-      ...formState,
-      [name]: value,
-    });
-  };
-
-  const handleFormSubmit = async (event) => {
+export default function Login() {
+  const [values, setValues] = useState({ email: '', password: '' });
+  const [login, { error, loading }] = useMutation(LOGIN_USER);
+  async function submit(event) {
     event.preventDefault();
-    try {
-      const { data } = await login({
-        variables: { ...formState },
-      });
-
-      Auth.login(data.login.token);
-    } catch (e) {
-      console.error(e);
-    }
-
-    setFormState({
-      email: '',
-      password: '',
-    });
-  };
-
+    if (loading) return;
+    try { const result = await login({ variables: values }); Auth.login(result.data.login.token); }
+    catch { /* Apollo supplies the error below. */ }
+  }
   return (
-    <div className="container-fluid" style={{ backgroundColor: 'var(--beige)' }}>
-      <div className="row">
-        <div className="col">
-          <div className="d-flex flex-row justify-content-center align-items-center ps-5 pt-5">
-            <i className="fas fa-crow fa-3x me-3" style={{ color: '#709085' }}></i>
+    <main className="account-page account-page--narrow">
+      <div className="account-page__heading"><h1>Log in</h1><p>Welcome back. Your next adventure is waiting.</p></div>
+      <form className="form-panel" onSubmit={submit}>
+        <fieldset disabled={loading}>
+          <div className="form-fields">
+            <div className="form-field form-field--wide"><label htmlFor="email">Email address</label><input id="email" name="email" type="email" autoComplete="email" required maxLength={254}
+              value={values.email} onChange={event => setValues(current => ({ ...current, email: event.target.value }))} /></div>
+            <div className="form-field form-field--wide"><label htmlFor="password">Password</label><input id="password" name="password" type="password" autoComplete="current-password" required
+              value={values.password} onChange={event => setValues(current => ({ ...current, password: event.target.value }))} /></div>
           </div>
-
-          <div className="d-flex flex-column h-custom-2 pt-4">
-            <h3 className="fw-normal mb-3 pb-3 text-center" style={{ letterSpacing: '1px' }}>Log in</h3>
-
-            <div className="mb-4 mx-5">
-              <label htmlFor="email" className="form-label">Email address</label>
-              <input
-                className="form-control"
-                id="email"
-                type="email"
-                name="email"
-                value={formState.email}
-                onChange={handleChange}
-              />
-            </div>
-
-            <div className="mb-4 mx-5">
-              <label htmlFor="password" className="form-label">Password</label>
-              <input
-                className="form-control"
-                id="password"
-                type="password"
-                name="password"
-                value={formState.password}
-                onChange={handleChange}
-              />
-            </div>
-
-            <button className="btn btn-primary mb-4 px-5 mx-5" type="submit" style={{backgroundColor: 'var(--orange'}} onClick={handleFormSubmit}>Login</button>
-            {error && (
-              <div className="my-3 p-3 bg-danger" style={{color:'var(--black)', textAlign:'center'}}>
-                {error.message}
-              </div>
-            )}
-            {/* <p className="small mb-5 pb-lg-3 ms-5"><a className="text-muted" href="#!">Forgot password?</a></p> */}
-            <p className="ms-2 text-center"><Link to="/signup" className="link-info text-center" style={{ color: 'var(--orange)' }}>Don't have an account? Register here</Link></p>
-          </div>
-        </div>
-
-        <div className="col-sm-6 d-none d-sm-block px-0">
-          <img src={JunglePic} alt="" className="w-100" style={{ objectFit: 'cover', objectPosition: 'center', height: 'calc(100vh - 170px)', overflow: 'hidden' }} />
-        </div>
-      </div>
-      {/* where error message appeared before */}
-    </div>
+          {error && <p role="alert" className="form-error">{error.message}</p>}
+          <div className="form-actions"><button className="account-button" type="submit">{loading ? 'Logging in…' : 'Log in'}</button><Link to="/signup">Don't have an account? Sign up</Link></div>
+        </fieldset>
+      </form>
+    </main>
   );
-};
-
-export default Login;
+}

@@ -132,6 +132,33 @@ database connection starts. It affects Node's DNS resolution in this process.
 Leave it blank or omit it to use the normal resolver in other environments,
 including hosting. Hosted values take precedence over a local file.
 
+## Profile, form and city experience
+
+The profile page uses a round avatar and an explicit Add/Change profile photo action.
+The photo editor closes after a successful upload and shows a confirmation; normal
+visits keep upload controls hidden. Profile details, interests and created trips
+have a responsive layout, with one Edit profile form and visible save/cancel states.
+
+Sign up, log in, profile creation/editing, trip creation and search use native form
+submission. Enter submits ordinary input fields, selects a highlighted city/interest
+suggestion first, and keeps newline behavior in biographies and trip descriptions.
+Trip validation stays quiet initially, then shows errors on blur or submission;
+missing fields and reversed date ranges cannot create a trip. Calendar date values
+are sent as YYYY-MM-DD so dates do not shift when a user is in a different timezone.
+
+City suggestions are available in home search, trip departure/destination, and
+profile creation/editing. Type at least three characters; results include region
+and country hints, and accept free text if a place is missing or the service is down.
+Selected values retain the city name to keep existing string-based trips searchable;
+region/country hints are not persisted or used as structured geographic filters.
+
+GET /api/locations uses [Open-Meteo geocoding](https://open-meteo.com/en/docs/geocoding-api)
+with [GeoNames](https://www.geonames.org/) attribution. It needs no API key on the
+[non-commercial free tier](https://open-meteo.com/en/pricing), which has usage limits
+and no uptime guarantee. Requests are debounced, bounded to eight results, cached
+for one day in a bounded server cache, coalesced and rate limited. There are no new
+package dependencies. Review the provider's terms before commercial use.
+
 ## Backend validation and durable profile photos
 
 The API now uses Apollo Server 5 with the existing Express app. Account,

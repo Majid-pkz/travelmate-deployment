@@ -42,6 +42,13 @@ const api = createServer(async (request, response) => {
   if (request.url === '/graphql' && body.includes('joinTrip')) {
     smokeJoined = true;
     response.end(JSON.stringify({ data: { joinTrip: stateTrips()[2] } }));
+  } else if (request.url.startsWith('/api/locations')) {
+    const term = new URL(request.url, base).searchParams.get('q');
+    if (term === 'Offline') { response.statusCode = 503; response.end(JSON.stringify({ locations: [] })); }
+    else response.end(JSON.stringify({ locations: term?.toLowerCase().startsWith('syd') ? [
+      { id: '2147714', name: 'Sydney', region: 'New South Wales', country: 'Australia' },
+      { id: '6354908', name: 'Sydney', region: 'Nova Scotia', country: 'Canada' },
+    ] : [{ id: '1850147', name: 'Tokyo', region: 'Tokyo', country: 'Japan' }] }));
   } else if (request.url === '/graphql') {
     response.end(JSON.stringify({
       data: body.includes('searchTrips') ? {
@@ -118,6 +125,26 @@ async function checkFrontend(browser, mode) {
       ? route.continue() : route.abort());
 
     await page.goto(base, { waitUntil: 'domcontentloaded' });
+    await page.getByRole('heading', { name: /Welcome to Travelmate/i }).waitFor();
+    const city = page.getByRole('combobox', { name: 'Departure location', exact: true });
+    await city.fill('syd');
+    await page.getByRole('option', { name: /Sydney.*Australia/ }).waitFor();
+    await city.press('ArrowDown');
+    await city.press('Enter');
+    assert.equal(await city.inputValue(), 'Sydney');
+    assert.equal(page.url(), base + '/', 'Selecting a city must not submit the search');
+    await city.press('Enter');
+    await page.waitForURL(base + '/trips?search=Sydney');
+    await page.getByRole('heading', { name: 'Sydney road trip', exact: true }).waitFor();
+    await page.goto(base);
+    await city.fill('tok');
+    await page.getByRole('option', { name: /Tokyo.*Japan/ }).click();
+    assert.equal(await city.inputValue(), 'Tokyo');
+    await city.fill('Offline');
+    await page.getByText('Suggestions are unavailable. You can still enter a location.', { exact: true }).waitFor();
+    await city.press('Enter');
+    await page.waitForURL(base + '/trips?search=Offline');
+    await page.goto(base);
     await page.getByRole('heading', { name: /Welcome to Travelmate/i }).waitFor();
     const slide = page.getByRole('button', { name: 'Show slide 2' });
     await slide.focus();
@@ -199,7 +226,7 @@ async function checkFrontend(browser, mode) {
     await page.reload();
     await open.getByText('Joined', { exact: true }).waitFor();
     assert.deepEqual(errors, [], 'Pages should render without JavaScript errors');
-    console.log(mode + ': page rendering, trip membership states, equal card heights, avatar fallbacks, keyboard details, mobile layout, private routes and proxies passed');
+    console.log(mode + ': page rendering, trip membership states, equal card heights, avatar fallbacks, global city selection, Enter search, provider fallback, keyboard details, mobile layout, private routes and proxies passed');
   } finally {
     if (context) await context.close();
     if (child.exitCode === null) {

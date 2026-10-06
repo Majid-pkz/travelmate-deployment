@@ -10,6 +10,7 @@ const { rateLimit } = require('express-rate-limit');
 const { authMiddleware } = require('./utils/auth');
 const { typeDefs, resolvers } = require('./schemas');
 const imageRoutes = require('./schemas/image-routes');
+const { createLocationsRouter } = require('./routes/locations');
 
 function limitFields(context) {
   let fields = 0;
@@ -61,6 +62,10 @@ async function createApp() {
     const connected = mongoose.connection.readyState === 1;
     res.status(connected ? 200 : 503).json({ status: connected ? 'ok' : 'unavailable' });
   });
+  app.use('/api/locations',
+    rateLimit({ windowMs: 60_000, limit: 60, standardHeaders: 'draft-8', legacyHeaders: false }),
+    createLocationsRouter(),
+  );
   // Keep the original checked-in image URLs usable; new photos live in MongoDB.
   app.use('/images', express.static(path.join(__dirname, 'images')));
   app.use('/api', (req, res) => res.status(404).json({ error: 'Endpoint not found.' }));

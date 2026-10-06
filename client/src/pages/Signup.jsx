@@ -1,138 +1,36 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import Tent from '../assets/tent.jpg'
 import { useMutation } from '@apollo/client';
 import { CREATE_USER } from '../utils/mutations';
 import Auth from '../utils/auth';
+import '../components/Forms.css';
 
-const Signup = () => {
-  const [formState, setFormState] = useState({
-    firstname: '',
-    lastname: '',
-    email: '',
-    password: '',
-  });
-  const [createUser, { error, data }] = useMutation(CREATE_USER);
-
-  const handleChange = (event) => {
-    const { name, value } = event.target;
-
-    setFormState({
-      ...formState,
-      [name]: value,
-    });
-  };
-
-  const handleFormSubmit = async (event) => {
+export default function Signup() {
+  const [values, setValues] = useState({ firstname: '', lastname: '', email: '', password: '' });
+  const [createUser, { error, loading }] = useMutation(CREATE_USER);
+  const change = event => setValues(current => ({ ...current, [event.target.name]: event.target.value }));
+  async function submit(event) {
     event.preventDefault();
-
-    try {
-      const { data } = await createUser({
-        variables: { ...formState },
-      });
-
-      Auth.login(data.createUser.token);
-    } catch (e) {
-      console.error(e);
-    }
-  };
-
+    if (loading) return;
+    try { const result = await createUser({ variables: values }); Auth.login(result.data.createUser.token); }
+    catch { /* Apollo supplies the error below. */ }
+  }
   return (
-    <div className="container-fluid" style={{ backgroundColor: 'var(--beige)' }}>
-      <div className="row">
-        <div className="col">
-          <div className="d-flex flex-row justify-content-center align-items-center ps-5 ">
-            <i className="fas fa-crow fa-3x me-3" style={{ color: '#709085' }}></i>
+    <main className="account-page account-page--narrow">
+      <div className="account-page__heading"><h1>Sign up</h1><p>Meet your travelmates and start planning together.</p></div>
+      <form className="form-panel" onSubmit={submit}>
+        <fieldset disabled={loading}>
+          <div className="form-fields">
+            <div className="form-field"><label htmlFor="firstname">First name</label><input id="firstname" name="firstname" type="text" required maxLength={50} value={values.firstname} onChange={change} /></div>
+            <div className="form-field"><label htmlFor="lastname">Last name</label><input id="lastname" name="lastname" type="text" required maxLength={50} value={values.lastname} onChange={change} /></div>
+            <div className="form-field form-field--wide"><label htmlFor="email">Email address</label><input id="email" name="email" type="email" autoComplete="email" required maxLength={254} value={values.email} onChange={change} /></div>
+            <div className="form-field form-field--wide"><label htmlFor="password">Password</label><input id="password" name="password" type="password" minLength={8} maxLength={72} autoComplete="new-password" required value={values.password} onChange={change} aria-describedby="password-help" />
+              <small id="password-help" className="form-helper">Use at least 8 characters.</small></div>
           </div>
-
-          <div className="d-flex flex-column h-custom-2 pt-4">
-            <h3 className="fw-normal mb-3 pb-3 text-center" style={{ letterSpacing: '1px' }}>Sign Up</h3>
-
-            <form onSubmit={handleFormSubmit}>
-              <div className="mb-4 mx-5">
-                <label htmlFor="firstname" className="form-label">First Name</label>
-                <input
-                  className="form-control"
-                  id="firstname"
-                  type="text"
-                  name="firstname"
-                  value={formState.firstname}
-                  onChange={handleChange}
-                />
-              </div>
-
-              <div className="mb-4 mx-5">
-                <label htmlFor="lastname" className="form-label">Last Name</label>
-                <input
-                  className="form-control"
-                  id="lastname"
-                  type="text"
-                  name="lastname"
-                  value={formState.lastname}
-                  onChange={handleChange}
-                />
-              </div>
-
-              <div className="mb-4 mx-5">
-                <label htmlFor="email" className="form-label">Email address</label>
-                <input
-                  className="form-control"
-                  id="email"
-                  type="email"
-                  name="email"
-                  value={formState.email}
-                  onChange={handleChange}
-                />
-              </div>
-
-              <div className="mb-4 mx-5">
-                <label htmlFor="password" className="form-label">Password</label>
-                <input
-                  className="form-control"
-                  id="password"
-                  type="password"
-                  minLength={8}
-                  maxLength={72}
-                  autoComplete="new-password"
-                  required
-                  name="password"
-                  value={formState.password}
-                  onChange={handleChange}
-                />
-              </div>
-              <div className="d-flex justify-content-center">
-              <button className=" btn btn-primary mb-4 mx-5 w-100" type="submit"style={{backgroundColor: 'var(--orange'}}>Submit</button>
-              </div>
-            </form>
-
-            {data ? (
-              <p>
-                Success! You may now head{' '}
-                <Link to="/">back to the homepage.</Link>
-              </p>
-            ) : (
-              <p className="ms-2 text-center" style={{ color: 'var(--orange)' }}>
-                Already have an account?{' '}
-                <Link to="/login" className="link-info text-center" style={{ color: 'var(--orange)' }}>
-                  Log in here
-                </Link>
-              </p>
-            )}
-
-            {error && (
-              <div className="my-3 p-3 bg-danger text-white">
-                {error.message}
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="col-sm-6 d-none d-sm-block px-0">
-        <img src={Tent} alt="" className="w-100" style={{ objectFit: 'cover', objectPosition: 'center', height: 'calc(100vh - 170px)', overflow: 'hidden' }} />
-        </div>
-      </div>
-    </div>
+          {error && <p role="alert" className="form-error">{error.message}</p>}
+          <div className="form-actions"><button className="account-button" type="submit">{loading ? 'Creating account…' : 'Sign up'}</button><Link to="/login">Already have an account? Log in</Link></div>
+        </fieldset>
+      </form>
+    </main>
   );
-};
-
-export default Signup;
+}
