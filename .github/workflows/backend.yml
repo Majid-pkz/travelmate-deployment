@@ -45,6 +45,8 @@ jobs:
           npm audit --audit-level=low
           npm audit --prefix server --audit-level=low
           npm audit --prefix client --audit-level=low
+      - name: Check the patched development launcher
+        run: npm exec -- concurrently --success all "node --version" "npm --version"
       - name: Check runtime configuration and authentication
         run: |
           npm run test:config

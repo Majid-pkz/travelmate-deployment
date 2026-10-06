@@ -41,6 +41,11 @@ cover JavaScript correctness, hook dependencies and accessibility. React Compile
 purity and effect-state checks are not enabled because this app does not use the
 React Compiler.
 
+The local development launcher overrides its pinned `shell-quote` dependency
+to the patched 1.11.0 release for
+[GHSA-pqg4-j6r4-53mv](https://github.com/ljharb/shell-quote/security/advisories/GHSA-pqg4-j6r4-53mv).
+CI checks both the dependency audit and parallel command execution.
+
 ## Private local configuration
 
 1. Install Node.js 24 LTS.

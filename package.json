@@ -18,6 +18,11 @@
   "devDependencies": {
     "concurrently": "^10.0.5"
   },
+  "overrides": {
+    "concurrently": {
+      "shell-quote": "1.11.0"
+    }
+  },
   "dependencies": {},
   "engines": {
     "node": "24.x"
